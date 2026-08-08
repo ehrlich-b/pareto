@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Pareto Explorer</title>
+<style>
+/* Neutrals carry a faint cool bias so they read chosen, not defaulted.
+   Series hues are the validated 3-slot identity set — do not add a 4th. */
+:root {
+  color-scheme: light;
+  --page:       #f4f5f7;
+  --surface:    #fbfbfc;
+  --ink:        #0d0f13;
+  --ink-2:      #4a5058;
+  --muted:      #7c838d;
+  --grid:       #e3e5ea;
+  --axis:       #c2c6ce;
+  --border:     rgba(13,15,19,0.11);
+  --s1: #2a78d6;  /* Anthropic */
+  --s2: #eb6834;  /* OpenAI */
+  --s3: #1baf7a;  /* Google */
+  --s-other: #8b929c;
+  --warn: #9a6800;
+  --warn-bg: rgba(154,104,0,.12);
+  --ok-bg: rgba(13,15,19,.05);
+  --accent: #2a78d6;
+  --front: #0d0f13;          /* frontier = ink weight, never a hue */
+  --front-fill: rgba(13,15,19,.055);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page:       #0b0c0e;
+    --surface:    #16181c;
+    --ink:        #f2f4f7;
+    --ink-2:      #a8afba;
+    --muted:      #6e7681;
+    --grid:       #24272d;
+    --axis:       #343841;
+    --border:     rgba(242,244,247,0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s-other: #767e89;
+    --warn: #fab219;
+    --warn-bg: rgba(250,178,25,.13);
+    --ok-bg: rgba(242,244,247,.06);
+    --accent: #3987e5;
+    --front: #f2f4f7;
+    --front-fill: rgba(242,244,247,.05);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:       #0b0c0e;
+  --surface:    #16181c;
+  --ink:        #f2f4f7;
+  --ink-2:      #a8afba;
+  --muted:      #6e7681;
+  --grid:       #24272d;
+  --axis:       #343841;
+  --border:     rgba(242,244,247,0.10);
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s-other: #767e89;
+  --warn: #fab219;
+  --warn-bg: rgba(250,178,25,.13);
+  --ok-bg: rgba(242,244,247,.06);
+  --accent: #3987e5;
+  --front: #f2f4f7;
+  --front-fill: rgba(242,244,247,.05);
+}
+* { box-sizing: border-box; }
+:root {
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+}
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1320px; margin: 0 auto; padding: 32px 28px 64px; }
+
+/* ---- masthead ---- */
+.mast { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; margin-bottom: 22px; }
+.mast .lede { flex: 1 1 460px; min-width: 0; }
+header h1 {
+  font-size: 30px; line-height: 1.1; margin: 0 0 7px; letter-spacing: -0.021em;
+  font-weight: 620; text-wrap: balance;
+}
+header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap: pretty; }
+.eyebrow {
+  font: 600 10.5px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 11px;
+}
+
+/* freshness reads as state, not prose — semantic color, separate from the accent */
+.prov { display: flex; flex-direction: column; gap: 7px; align-items: flex-end; font-size: 12px; color: var(--muted); }
+.prov b { color: var(--ink-2); font-weight: 600; }
+.prov .pill {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  font: 500 11.5px/1 var(--mono); padding: 6px 10px; border-radius: 999px;
+  background: var(--ok-bg); color: var(--ink-2); border: 1px solid var(--border);
+}
+.prov .pill::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .75;
+}
+.prov .pill.stale { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.prov .meta { font-size: 11.5px; text-align: right; max-width: 42ch; }
+.prov a { color: var(--ink-2); }
+
+/* ---- frontier readout: the chart's header — the answer in words + numbers ---- */
+.readout {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 14px 2px 13px; margin-top: 13px; border-top: 1px solid var(--grid);
+}
+.readout .rhead { display: flex; align-items: baseline; gap: 8px 18px; flex-wrap: wrap; }
+.readout .rtitle { font-size: 17px; font-weight: 620; letter-spacing: -0.012em; color: var(--ink); }
+.readout .raxes { font: 500 11.5px/1.4 var(--mono); color: var(--muted); }
+.readout .rstats { margin-left: auto; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+.stat { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.stat .k { font: 600 10px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font: 600 13.5px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.readout .rlabel {
+  font: 600 10.5px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--muted);
+}
+.readout .rlist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fchip {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: 500 12px/1 var(--mono); padding: 5px 9px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--page); color: var(--ink-2);
+  white-space: nowrap; transition: border-color .12s, color .12s;
+}
+.fchip:hover { border-color: var(--front); color: var(--ink); }
+.fchip .fval { color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout .rnone { font-size: 12.5px; color: var(--muted); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px; margin-bottom: 16px;
+}
+.row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.row + .row { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--grid); }
+.grp { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
+.grp .glabel {
+  font: 600 10.5px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+}
+.sep { width: 1px; align-self: stretch; background: var(--grid); }
+label.ctl {
+  display: inline-flex; align-items: center; gap: 7px; color: var(--muted);
+  font: 600 10.5px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase;
+}
+label.ctl > select, label.ctl > details { text-transform: none; letter-spacing: 0; }
+select, button, input[type=text] {
+  font: 13px/1.2 var(--sans); color: var(--ink); background: var(--page);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px;
+  transition: border-color .12s;
+}
+select:hover, button:hover, input[type=text]:hover { border-color: var(--axis); }
+/* the axis pair is the primary control — everything else is a filter */
+#xaxis, #yaxis, #bench { font-weight: 500; }
+select {
+  appearance: none; -webkit-appearance: none; padding-right: 24px;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23898781'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+select:focus, button:focus, input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { cursor: pointer; }
+button.preset { font-size: 12.5px; color: var(--ink-2); }
+button.preset:hover:not(.off) { border-color: var(--accent); color: var(--ink); }
+button.preset.on { border-color: var(--accent); color: var(--ink); background: color-mix(in oklab, var(--accent) 16%, var(--surface)); }
+button.preset.off { opacity: .4; cursor: not-allowed; }
+input#find { width: 128px; }
+.chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+details.labs { position: relative; font-size: 13px; color: var(--ink-2); }
+details.labs summary { cursor: pointer; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 9px; list-style: none; user-select: none; }
+details.labs summary::after { content: " ▾"; color: var(--muted); }
+details.labs[open] summary { border-color: var(--accent); }
+details.labs .pop {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 230px; max-height: 300px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+}
+details.labs .pop label { display: flex; gap: 6px; align-items: center; padding: 3px 4px; cursor: pointer; }
+.legend {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; padding-top: 13px;
+  border-top: 1px solid var(--grid); font-size: 12.5px; align-items: center;
+}
+.legend .chip { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); cursor: pointer; padding: 3px 7px; border-radius: 6px; border: 1px solid transparent; }
+.legend .chip:hover { border-color: var(--border); }
+.legend .chip.off { opacity: .38; }
+.legend .enc { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+#chart { position: relative; }
+#chart svg { display: block; width: 100%; }
+.tick text, .axlabel { fill: var(--muted); font-size: 11px; }
+.axlabel { font-size: 12px; }
+.ptlabel { fill: var(--ink-2); font-size: 11px; }
+.lblbg { fill: var(--surface); opacity: .78; }
+/* the frontier is the subject of the page — emphasis by weight + fill, never by hue,
+   so color keeps meaning lab identity only */
+.frontier { fill: none; stroke: var(--front); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.frontier-fill { fill: var(--front-fill); stroke: none; }
+.frontier-halo { fill: none; stroke: var(--surface); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; }
+/* the estimate has width: a soft band says "about here", the dashes say "beyond the data" */
+.frontier-band { fill: none; stroke: var(--front); opacity: .06; stroke-width: 16; stroke-linecap: round; stroke-linejoin: round; }
+.frontier-ext { fill: none; stroke: var(--front); stroke-width: 2; stroke-dasharray: 2 5; stroke-linecap: round; opacity: .65; }
+.regionlbl { font: 600 10px var(--mono); letter-spacing: .14em; fill: var(--muted); opacity: .85; }
+.pt { transition: opacity .12s; }
+/* dominated points recede so the frontier is the loudest mark on the plot */
+.pt-dom { opacity: .45; }
+.pt-dom:hover { opacity: 1; }
+.pt.faded { opacity: .12; }
+.pt-front .ring { fill: none; stroke: var(--front); stroke-width: 1.6; }
+#tip.pinned { pointer-events: auto; }
+#tip {
+  position: absolute; z-index: 40; pointer-events: none; display: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18); padding: 10px 12px; font-size: 12px; max-width: 320px;
+}
+#tip.pinned { border-color: var(--accent); }
+#tip h4 { margin: 0 0 2px; font-size: 13px; color: var(--ink); }
+#tip .fr { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+#tip table { border-collapse: collapse; }
+#tip td { padding: 1px 0; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tip td:first-child { color: var(--muted); padding-right: 12px; }
+#tip .age { color: var(--muted); }
+.viewtabs { margin-left: auto; display: flex; gap: 4px; }
+.viewtabs button.on { border-color: var(--accent); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
+.subnote { font: 11.5px/1.5 var(--mono); color: var(--muted); margin-top: 10px; min-height: 2.4em; }
+.subnote b { color: var(--ink-2); font-weight: 600; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.data th {
+  text-align: left; font-weight: 600; color: var(--ink-2); cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--axis); padding: 6px 10px 6px 0; white-space: nowrap;
+}
+table.data th .hint { color: var(--muted); opacity: .35; font-weight: 400; }
+table.data th:hover .hint { opacity: 1; }
+table.data th.num, table.data td.num { text-align: right; }
+table.data td { border-bottom: 1px solid var(--grid); padding: 5px 10px 5px 0; color: var(--ink-2); white-space: nowrap; }
+table.data td.name { color: var(--ink); }
+table.data tr.hit td { background: color-mix(in oklab, var(--accent) 12%, transparent); }
+table.data .glyph { display: inline-block; width: 12px; margin-right: 6px; vertical-align: -1px; }
+table.data .star { color: var(--ink-2); display: inline-block; width: 14px; }
+footer { font-size: 12px; color: var(--muted); margin-top: 26px; max-width: 92ch; line-height: 1.6; }
+footer a { color: var(--ink-2); }
+footer code { font: 11.5px var(--mono); }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+@media (max-width: 720px) {
+  .wrap { padding: 22px 16px 48px; }
+  header h1 { font-size: 24px; }
+  .prov { align-items: flex-start; }
+  .prov .meta { text-align: left; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mast">
+    <header class="lede">
+      <div class="eyebrow">Pareto frontier · multi-benchmark</div>
+      <h1>AI Pareto Explorer</h1>
+      <div class="sub">Pick any two axes across ~75 benchmarks — the frontier recomputes live, and each point carries its sources and dates: eval date where published, snapshot date otherwise.</div>
+    </header>
+    <div class="prov" id="prov"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <span class="grp"><label class="ctl">Benchmark <select id="bench"></select></label></span>
+      <span class="grp">
+        <label class="ctl">X <select id="xaxis"></select></label>
+        <label class="ctl">Y <select id="yaxis"></select></label>
+      </span>
+      <span class="sep"></span>
+      <span class="grp">
+        <span class="glabel">Presets</span>
+        <button class="preset" data-x="blended" data-y="score" data-needs="blended">$ vs score</button>
+        <button class="preset" data-x="date" data-y="score" data-needs="date">progress over time</button>
+        <button class="preset" data-x="params" data-y="score" data-needs="params">size vs score</button>
+      </span>
+    </div>
+    <div class="row">
+      <label class="ctl">Released <select id="range">
+        <option value="all">any time</option>
+        <option value="24">last 24 mo</option>
+        <option value="12" selected>last 12 mo</option>
+        <option value="6">last 6 mo</option>
+      </select></label>
+      <label class="ctl">Labs <details class="labs" id="labs"><summary>all</summary><div class="pop" id="labspop"></div></details></label>
+      <label class="ctl">Model weights <select id="weights">
+        <option value="all">open + closed</option>
+        <option value="open">open only</option>
+        <option value="closed">closed only</option>
+      </select></label>
+      <label class="chk" title="Keeps only the highest-scoring reasoning-effort configuration of each model. Uncheck to see every configuration — cheap low-effort configs often sit on the real cost frontier."><input type="checkbox" id="best" checked> best reasoning-effort config only</label>
+      <span class="sep"></span>
+      <input type="text" id="find" placeholder="find model…" title="Highlights matching models in the chart and table">
+      <button id="copylink" title="Copy a link to this exact view">copy view link</button>
+      <div class="viewtabs">
+        <button id="tab-scatter" class="on">Scatter</button>
+        <button id="tab-table">Table</button>
+      </div>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div id="chart"><div id="tip"></div></div>
+    <div id="tablewrap" style="display:none; overflow-x:auto"></div>
+    <div class="legend" id="legend"></div>
+    <div class="subnote" id="note"></div>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script src="data/data.js"></script>
+<script>
+"use strict";
+const D = window.PARETO;
+const NOW = new Date();
+
+/* ---------- org encoding: 3 validated color slots; next labs get shapes; rest gray ---------- */
+function orgKey(org) {
+  const o = (org || "").toLowerCase();
+  if (o.includes("anthropic")) return "Anthropic";
+  if (o.includes("openai")) return "OpenAI";
+  if (o.includes("google")) return "Google";
+  return "other";
+}
+const ORG_COLOR = { Anthropic: "var(--s1)", OpenAI: "var(--s2)", Google: "var(--s3)", other: "var(--s-other)" };
+const ORG_SHAPE = { "xAI": "triangle", "Meta": "square", "Moonshot AI": "diamond", "DeepSeek": "tridown" };
+
+/* ---------- formatting ---------- */
+const fmtSI = v => {
+  if (v == null) return "—";
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return +(v/1e12).toPrecision(3) + "T";
+  if (abs >= 1e9)  return +(v/1e9 ).toPrecision(3) + "B";
+  if (abs >= 1e6)  return +(v/1e6 ).toPrecision(3) + "M";
+  if (abs >= 1e3)  return +(v/1e3 ).toPrecision(3) + "k";
+  return String(+v.toPrecision(3));
+};
+const fmtCtx = v => v == null ? "—" : v >= 1e6 ? +(v/1e6).toPrecision(2) + "M" : +(v/1e3).toPrecision(2) + "k";
+const fmtMoney = v => v == null ? "—" : (v >= 100 ? "$" + Math.round(v) : v >= 1 ? "$" + v.toFixed(2) : "$" + v.toPrecision(2));
+const fmtMoneyTick = v => v >= 100 ? "$" + Math.round(v) : v >= 1 ? "$" + (+v.toFixed(2)) : "$" + v.toFixed(2);
+const fmtFlop = v => v == null ? "—" : v.toExponential(1).replace("e+", "e");
+const fmtDate = d => d ? d.toISOString().slice(0,10) : "—";
+function ageStr(d) {
+  if (!d) return null;
+  const days = Math.round((NOW - d) / 864e5);
+  if (days <= 0) return "today";
+  if (days < 60) return days + "d ago";
+  if (days < 540) return Math.round(days/30) + "mo ago";
+  return (days/365).toFixed(1) + "y ago";
+}
+const parseDate = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d : null; };
+const humanize = s => { s = s.replace(/_/g, " "); return s[0].toUpperCase() + s.slice(1); };
+
+/* per-benchmark score units where the raw column name isn't self-explanatory */
+const UNITS = { metr_time_horizons: "human-task minutes", ale_bench: "rating", algotune: "speedup ×" };
+
+/* ---------- axes ---------- */
+const AXES = {
+  score:   { label: () => scoreLabel(), short: "a score", dir: "up", scale: "linear",
+             get: p => p.v, fmt: v => scoreFmt(v), tick: v => scoreTick(v) },
+  taskcost:{ label: () => "$ per task", short: "$/task", dir: "down", scale: "log",
+             get: p => p.c, fmt: fmtMoney, tick: fmtMoneyTick, needsCost: true },
+  blended: { label: () => "Blended $/M tokens (3:1 in:out)", short: "a price", dir: "down", scale: "log",
+             get: p => p.M.price_in != null ? (3*p.M.price_in + p.M.price_out)/4 : null, fmt: fmtMoney, tick: fmtMoneyTick },
+  price_in:{ label: () => "Input $/M tokens", short: "a price", dir: "down", scale: "log",
+             get: p => p.M.price_in, fmt: fmtMoney, tick: fmtMoneyTick },
+  price_out:{ label: () => "Output $/M tokens", short: "a price", dir: "down", scale: "log",
+             get: p => p.M.price_out, fmt: fmtMoney, tick: fmtMoneyTick },
+  date:    { label: () => "Release date", short: "a release date", dir: "down", scale: "time", neutral: true,
+             get: p => p.rd, fmt: fmtDate },
+  params:  { label: () => "Parameters (total)", short: "a param count", dir: "down", scale: "log", betterWord: "smaller is better",
+             get: p => p.M.params, fmt: fmtSI },
+  flop:    { label: () => "Training compute (FLOP)", short: "a FLOP estimate", dir: "down", scale: "log", betterWord: "less is better",
+             get: p => p.M.flop, fmt: fmtFlop, tick: fmtFlop },
+  context: { label: () => "Context window (tokens)", short: "a context size", dir: "up", scale: "log",
+             get: p => p.M.context, fmt: fmtCtx, tick: fmtCtx },
+  aa_int:  { label: () => "AA intelligence index (0–100)", short: "an AA index", dir: "up", scale: "linear",
+             get: p => p.M.aa && p.M.aa.intelligence_index, fmt: v => v == null ? "—" : v.toFixed(1) },
+};
+const AXIS_ORDER = ["score","blended","taskcost","price_in","price_out","date","params","flop","context","aa_int"];
+
+/* ---------- state ---------- */
+const state = { bench: "deepswe", x: "blended", y: "score", range: "12",
+                weights: "all", best: true, view: "scatter",
+                offOrgs: new Set(), offLabs: new Set(), labSel: null,
+                sortCol: "score", sortDir: -1, hover: null, find: "", pin: null };
+if (!D.benchmarks[state.bench]) state.bench = Object.keys(D.benchmarks)[0];
+function readHash() {
+  try {
+    const h = new URLSearchParams(location.hash.slice(1));
+    for (const k of ["bench","x","y","range","weights"]) if (h.get(k)) state[k] = h.get(k);
+    if (h.get("best")) state.best = h.get("best") === "1";
+    if (!D.benchmarks[state.bench]) state.bench = "deepswe";
+    if (!AXES[state.x]) state.x = "blended";
+    if (!AXES[state.y]) state.y = "score";
+    if (state.x === state.y) { state.x = state.y === "score" ? "blended" : "score"; }
+  } catch (e) {}
+}
+readHash();
+function writeHash() {
+  const h = new URLSearchParams({ bench: state.bench, x: state.x, y: state.y,
+    range: state.range, weights: state.weights, best: state.best ? "1" : "0" });
+  // sandboxed/cross-origin embeds reject history writes — the view still works, it just isn't linkable
+  try { history.replaceState(null, "", "#" + h.toString()); } catch { /* not linkable here */ }
+}
+
+function bench() { return D.benchmarks[state.bench]; }
+let benchIsPct = false;
+function scoreLabel() {
+  const b = bench();
+  const unit = UNITS[b.id];
+  return humanize(b.score_col) + " — " + b.name + (unit ? ` (${unit})` : "");
+}
+function scoreFmt(v) {
+  if (v == null) return "—";
+  if (benchIsPct) return (100*v).toFixed(1) + "%";
+  return Math.abs(v) >= 100 ? String(Math.round(v)) : String(+v.toPrecision(3));
+}
+function scoreTick(v) { return benchIsPct ? Math.round(100*v) + "%" : scoreFmt(v); }
+
+/* ---------- point building ---------- */
+let benchRawN = 0;
+function cohort() {
+  const rows = D.scores.filter(s => s.b === state.bench);
+  benchRawN = rows.length;
+  const max = rows.reduce((m, r) => Math.max(m, r.v), -Infinity);
+  benchIsPct = max <= 1.2;
+  const byKey = new Map();                       // dedupe identical (model, effort)
+  for (const r of rows) {
+    const k = r.m + "|" + (r.e || "");
+    const prev = byKey.get(k);
+    if (!prev || r.v > prev.v) byKey.set(k, r);
+  }
+  let pts = [...byKey.values()].map(r => {
+    const M = D.models[r.m] || {};
+    return { ...r, M, org: orgKey(M.org), rd: parseDate(M.release_date), ed: parseDate(r.d) };
+  });
+  if (state.best) {
+    const byM = new Map();
+    for (const p of pts) { const prev = byM.get(p.m); if (!prev || p.v > prev.v) byM.set(p.m, p); }
+    pts = [...byM.values()];
+  }
+  return pts;
+}
+function filtered(pts) {
+  return pts.filter(p => {
+    if (state.range !== "all") {
+      if (!p.rd) return false;
+      const cutoff = new Date(NOW); cutoff.setMonth(cutoff.getMonth() - +state.range);
+      if (p.rd < cutoff) return false;
+    }
+    if (state.weights === "open" && p.M.open_weights !== true) return false;
+    if (state.weights === "closed" && p.M.open_weights !== false) return false;
+    if (state.offLabs.has(p.M.org)) return false;
+    if (state.offOrgs.has(p.org) && !(p.org === "other" && ORG_SHAPE[p.M.org])) return false;
+    if (state.labSel && !state.labSel.has(p.M.org || "?")) return false;
+    return true;
+  });
+}
+function displayName(p) {
+  let n = p.M.display || p.m;
+  if (!state.best && p.e) n += " (" + p.e + ")";
+  return n;
+}
+const pKey = p => p.m + "|" + (p.e || "");
+const matchesFind = p => !state.find || displayName(p).toLowerCase().includes(state.find);
+
+/* ---------- pareto ---------- */
+function axisVals(pts, ax, ay, reasons) {
+  return pts.filter(p => {
+    const x = ax.get(p), y = ay.get(p);
+    const badX = x == null || (ax.scale === "log" && x <= 0);
+    const badY = y == null || (ay.scale === "log" && y <= 0);
+    if (badX || badY) {
+      if (reasons) { if (badX) reasons.x++; if (badY) reasons.y++; }
+      return false;
+    }
+    p.px = x; p.py = y;
+    return true;
+  });
+}
+function paretoSet(pts, ax, ay) {
+  const val = v => v instanceof Date ? +v : v;
+  const better = (a, b, dir) => dir === "up" ? a > b : a < b;
+  const bettereq = (a, b, dir) => dir === "up" ? a >= b : a <= b;
+  const front = [];
+  for (const p of pts) {
+    let dominated = false;
+    for (const q of pts) {
+      if (q === p) continue;
+      const qx = val(q.px), qy = val(q.py), px = val(p.px), py = val(p.py);
+      if (bettereq(qx, px, ax.dir) && bettereq(qy, py, ay.dir) &&
+          (better(qx, px, ax.dir) || better(qy, py, ay.dir))) { dominated = true; break; }
+    }
+    if (!dominated) front.push(p);
+  }
+  return front.sort((a, b) => (+a.px) - (+b.px) || (+a.py) - (+b.py));
+}
+
+/* ---------- scales ---------- */
+function niceTicks(lo, hi, n) {
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const span = hi - lo, step0 = Math.pow(10, Math.floor(Math.log10(span / n)));
+  let step = step0 * 10;
+  for (const m of [1, 2, 2.5, 5, 10]) { if (span / (step0 * m) <= n) { step = step0 * m; break; } }
+  const ticks = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9 * step; t += step) ticks.push(+t.toPrecision(12));
+  return ticks;
+}
+function logTicks(lo, hi, dataMin) {
+  const ticks = [];
+  const dlo = Math.floor(Math.log10(lo)), dhi = Math.ceil(Math.log10(hi));
+  const mult = (dhi - dlo) <= 4 ? [1, 2, 5] : [1];
+  for (let d = dlo; d <= dhi; d++)
+    for (const m of mult) {
+      const v = m * Math.pow(10, d);
+      if (v >= lo / 1.001 && v <= hi * 1.001) ticks.push(v);
+    }
+  // make sure at least one tick sits at or below the data minimum
+  if (dataMin != null && ticks.length && ticks[0] > dataMin) {
+    const d = Math.pow(10, Math.floor(Math.log10(dataMin)));
+    for (const m of [5, 2, 1]) if (m * d <= dataMin) { ticks.unshift(m * d); break; }
+  }
+  return ticks;
+}
+function timeTicks(lo, hi) {
+  const ticks = [], months = (hi.getFullYear() - lo.getFullYear()) * 12 + hi.getMonth() - lo.getMonth();
+  const step = months > 48 ? 12 : months > 18 ? 6 : months > 8 ? 3 : 1;
+  const t = new Date(lo.getFullYear(), lo.getMonth(), 1);
+  if (t < lo) t.setMonth(t.getMonth() + 1);
+  while (t.getMonth() % step !== 0) t.setMonth(t.getMonth() + 1);
+  while (t <= hi) { ticks.push(new Date(t)); t.setMonth(t.getMonth() + step); }
+  return ticks;
+}
+const fmtTick = (ax, v) =>
+  ax.scale === "time" ? v.toLocaleString("en", { month: "short" }) + " ’" + String(v.getFullYear()).slice(2) :
+  ax.tick ? ax.tick(v) :
+  ax.fmt ? ax.fmt(v) : String(v);
+
+function makeScale(ax, vals, range, opts) {
+  opts = opts || {};
+  if (ax.scale === "time") {
+    let lo = new Date(Math.min(...vals.map(Number))), hi = new Date(Math.max(...vals.map(Number)));
+    if (opts.includeToday && hi < NOW) hi = NOW;
+    const pad = Math.max((hi - lo) * 0.05, 864e5 * 20);
+    const lo2 = new Date(+lo - pad);
+    // never extend the domain into the future: nothing can exist right of today
+    const hi2 = new Date(Math.min(+hi + pad, +NOW + 864e5 * 5));
+    const f = v => range[0] + (range[1] - range[0]) * (v - lo2) / (hi2 - lo2 || 1);
+    return { f, ticks: timeTicks(lo2, hi2), lo: lo2, hi: hi2 };
+  }
+  if (ax.scale === "log") {
+    const dataMin = Math.min(...vals);
+    let lo = dataMin, hi = Math.max(...vals);
+    lo /= 1.35; hi *= 1.35;
+    const f = v => range[0] + (range[1] - range[0]) * (Math.log(v) - Math.log(lo)) / (Math.log(hi) - Math.log(lo) || 1);
+    return { f, ticks: logTicks(lo, hi, dataMin), lo, hi };
+  }
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (opts.fixed) { lo = opts.fixed[0]; hi = opts.fixed[1]; }
+  else { const pad = (hi - lo || Math.abs(hi) || 1) * 0.06; lo -= pad; hi += pad; }
+  const f = v => range[0] + (range[1] - range[0]) * (v - lo) / (hi - lo || 1);
+  return { f, ticks: niceTicks(lo, hi, 7).filter(t => t >= lo - 1e-9 && t <= hi + 1e-9), lo, hi };
+}
+
+/* ---------- rendering ---------- */
+const $ = s => document.querySelector(s);
+const svgNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const e = document.createElementNS(svgNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function marker(shape, x, y, r, fillColor, hollow) {
+  const fill = hollow ? "var(--surface)" : fillColor;
+  const stroke = hollow ? fillColor : "var(--surface)";
+  const sw = hollow ? 2.25 : 1.5;
+  if (!shape || shape === "circle")
+    return svgEl("circle", { cx: x, cy: y, r: hollow ? r - 0.75 : r, fill, stroke, "stroke-width": sw });
+  const s = r + 1;
+  const pts = {
+    triangle: `${x},${y-s} ${x-s*0.92},${y+s*0.75} ${x+s*0.92},${y+s*0.75}`,
+    tridown:  `${x},${y+s} ${x-s*0.92},${y-s*0.75} ${x+s*0.92},${y-s*0.75}`,
+    square:   `${x-s*0.85},${y-s*0.85} ${x+s*0.85},${y-s*0.85} ${x+s*0.85},${y+s*0.85} ${x-s*0.85},${y+s*0.85}`,
+    diamond:  `${x},${y-s*1.15} ${x+s*1.15},${y} ${x},${y+s*1.15} ${x-s*1.15},${y}`,
+  }[shape];
+  return svgEl("polygon", { points: pts, fill, stroke, "stroke-width": sw });
+}
+function axisTitle(ax, glyph) {
+  let t = ax.label();
+  if (ax.scale === "log") t += " · log";
+  if (!ax.neutral) t += " · " + (glyph ? "better " + glyph : (ax.betterWord || (ax.dir === "up" ? "higher is better" : "lower is better")));
+  return t;
+}
+function effectiveAxis(ax, pts) {
+  if (ax !== AXES.score) return ax;
+  const vals = pts.map(p => ax.get(p)).filter(v => v != null);
+  if (!vals.length) return ax;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  if (min > 0 && max / min > 50) return { ...ax, scale: "log" };
+  return ax;
+}
+
+const STALE_MS = 90 * 864e5;
+const isStale = p => p.ed && (NOW - p.ed) > STALE_MS;
+const reasonText = (reasons, ax, ay) => {
+  const parts = [];
+  if (reasons.x) parts.push(`${reasons.x} lack ${ax.short}`);
+  if (reasons.y) parts.push(`${reasons.y} lack ${ay.short}`);
+  return parts.join(", ");
+};
+
+function render() {
+  writeHash();
+  renderProv();
+  const all = cohort();
+  const pts = filtered(all);
+  syncPresets(all);
+  if (state.view === "scatter") {
+    $("#chart").style.display = ""; $("#tablewrap").style.display = "none";
+    renderScatter(pts, all.length);
+  } else {
+    $("#chart").style.display = "none"; $("#tablewrap").style.display = "";
+    renderTable(pts, all.length);
+  }
+}
+
+/* Frontier model: in transformed space (log for log axes, logit for bounded % scores)
+   the efficient frontier is fit as a line through the undominated points — one clean
+   convex law with a real asymptote at the score ceiling, not an interpolation that
+   inherits every point's noise. r² = how well the frontier obeys the law. */
+function axTransform(a) {
+  if (a.get === AXES.score.get && benchIsPct) {
+    const cl = v => Math.min(0.995, Math.max(0.005, v));
+    return { f: v => { const c = cl(v); return Math.log(c / (1 - c)); },
+             inv: t => { const e = Math.exp(t); return e / (1 + e); } };
+  }
+  if (a.scale === "log") return { f: v => Math.log10(v), inv: t => Math.pow(10, t) };
+  return { f: v => +v, inv: t => t };
+}
+function fitFrontier(front, ax, ay) {
+  if (ax.scale === "time" || ay.scale === "time" || front.length < 2) return null;
+  const TX = axTransform(ax), TY = axTransform(ay);
+  const xs = front.map(p => TX.f(p.px)), ys = front.map(p => TY.f(p.py));
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxx = 0, sxy = 0, syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxx += dx*dx; sxy += dx*dy; syy += dy*dy; }
+  if (sxx === 0) return null;
+  const b = sxy / sxx, a0 = my - b * mx;
+  return { y: xv => TY.inv(a0 + b * TX.f(xv)),
+           r2: n >= 3 && syy > 0 ? (sxy * sxy) / (sxx * syy) : null,
+           xlo: Math.min(...front.map(p => +p.px)), xhi: Math.max(...front.map(p => +p.px)) };
+}
+
+/* The page's whole point is "who is on the frontier" — say it in words above the
+   plot so it doesn't have to be decoded from a scatter. */
+function renderFrontierReadout(front, ax, ay, isRecord, extra) {
+  const el = $("#readout");
+  const axName = (a, glyph) => a.get === AXES.score.get ? humanize(bench().score_col) + " · better " + glyph : axisTitle(a, glyph);
+  const st = (k, v) => `<span class="stat"><span class="k">${k}</span><span class="v">${v}</span></span>`;
+  const stats = [];
+  if (extra && extra.plotted > 0) {
+    stats.push(st(isRecord ? "record holders" : "on frontier", front.length));
+    stats.push(st("beaten", extra.plotted - front.length));
+    if (extra.r2 != null) stats.push(st("frontier fit r²", extra.r2.toFixed(2)));
+  }
+  const head = `<div class="rhead"><span class="rtitle">${bench().name}</span>` +
+    `<span class="raxes">${axName(ay, "↑")} × ${axName(ax, "→")}</span>` +
+    `<span class="rstats">${stats.join("")}</span></div>`;
+  if (!front || front.length === 0) {
+    el.innerHTML = head + `<span class="rnone">no models plottable on these two axes</span>`;
+    return;
+  }
+  const fmtAx = (a, p) => {
+    const v = a.get(p);
+    if (v == null) return "";
+    return a.scale === "time" ? fmtDate(v) : (a.tick ? a.tick(v) : a.fmt ? a.fmt(v) : String(v));
+  };
+  const chips = front.map(p => {
+    const nm = displayName(p);
+    return `<span class="fchip" data-name="${nm.toLowerCase().replace(/"/g, "&quot;")}">` +
+      `<span style="width:8px;height:8px;border-radius:50%;background:${ORG_COLOR[p.org]};flex:none"></span>` +
+      `${nm}<span class="fval">${fmtAx(ax, p)} · ${fmtAx(ay, p)}</span></span>`;
+  }).join("");
+  el.innerHTML = head +
+    `<span class="rlist"><span class="rlabel">${isRecord ? "Record holders" : "On the frontier"}</span>${chips}</span>`;
+  el.querySelectorAll(".fchip").forEach(c => {
+    c.addEventListener("mouseenter", () => { state.hover = { type: "name", v: c.dataset.name }; applyFade(); });
+    c.addEventListener("mouseleave", () => { state.hover = null; applyFade(); });
+  });
+}
+
+function funnelNote(cohortN, filteredN, shown, reasonsStr, frontStr, extra) {
+  const bits = [`${benchRawN} eval runs`,
+                `${cohortN} ${state.best ? "models (best config)" : "configs"}`,
+                `${cohortN - filteredN} hidden by filters`];
+  if (reasonsStr) bits.push(reasonsStr);
+  bits.push(`<b>${shown}</b> ${state.view === "scatter" ? "plotted" : "listed"}`);
+  if (frontStr) bits.push(frontStr);
+  if (extra) bits.push(extra);
+  $("#note").innerHTML = bits.join(" · ");
+}
+
+function renderScatter(pts, cohortN) {
+  const chart = $("#chart");
+  for (const n of [...chart.childNodes]) if (n.id !== "tip") n.remove();
+  hideTip(true);
+  const ax = effectiveAxis(AXES[state.x], pts), ay = effectiveAxis(AXES[state.y], pts);
+
+  const reasons = { x: 0, y: 0 };
+  const usable = axisVals(pts, ax, ay, reasons);
+  const dropped = pts.length - usable.length;
+  const reasonsStr = dropped ? reasonText(reasons, ax, ay) : "";
+
+  const W = chart.clientWidth || 1100;
+  const H = Math.max(420, Math.min(640, Math.round(W * 0.46)));
+  const m = { t: 34, r: 24, b: 46, l: 64 };
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H });
+  chart.appendChild(svg);
+  renderLegend(usable);
+
+  if (!usable.length) {
+    const t = svgEl("text", { x: W/2, y: H/2, "text-anchor": "middle", class: "axlabel" });
+    t.textContent = "no data for this axis combination";
+    svg.appendChild(t);
+    renderFrontierReadout([], ax, ay, false, { plotted: 0, r2: null });
+    funnelNote(cohortN, pts.length, 0, reasonsStr, 0);
+    return;
+  }
+
+  const pctFixed = { fixed: [0, 1] };   // bounded % metrics: full 0–100 both ends, every view
+  const timeOpts = { includeToday: true };
+  // better is ALWAYS up and to the right: lower-is-better axes get a reversed scale,
+  // so every view reads the same way — frontier arcing toward the top-right corner
+  const axRev = ax.dir === "down" && !ax.neutral;
+  const ayRev = ay.dir === "down" && !ay.neutral;
+  const xr = axRev ? [W - m.r, m.l] : [m.l, W - m.r];
+  const yr = ayRev ? [m.t, H - m.b] : [H - m.b, m.t];
+  const sx = makeScale(ax, usable.map(p => p.px), xr,
+                       ax.scale === "linear" && benchIsPct && ax.get === AXES.score.get ? pctFixed :
+                       ax.scale === "time" ? timeOpts : {});
+  const sy = makeScale(ay, usable.map(p => p.py), yr,
+                       ay.scale === "linear" && benchIsPct && ay.get === AXES.score.get ? pctFixed :
+                       ay.scale === "time" ? timeOpts : {});
+
+  // grid + ticks + closed frame
+  for (const t of sx.ticks) {
+    const x = sx.f(t);
+    if (x < m.l - 1 || x > W - m.r + 1) continue;
+    svg.appendChild(svgEl("line", { x1: x, x2: x, y1: m.t, y2: H - m.b, stroke: "var(--grid)" }));
+    const lbl = svgEl("text", { x, y: H - m.b + 16, "text-anchor": "middle", fill: "var(--muted)", "font-size": "11" });
+    lbl.textContent = fmtTick(ax, t);
+    svg.appendChild(lbl);
+  }
+  for (const t of sy.ticks) {
+    const y = sy.f(t);
+    if (y < m.t - 1 || y > H - m.b + 1) continue;
+    svg.appendChild(svgEl("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: "var(--grid)" }));
+    const lbl = svgEl("text", { x: m.l - 8, y: y + 3.5, "text-anchor": "end", fill: "var(--muted)", "font-size": "11" });
+    lbl.textContent = fmtTick(ay, t);
+    svg.appendChild(lbl);
+  }
+  svg.appendChild(svgEl("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b,
+                                  fill: "none", stroke: "var(--axis)" }));
+  const xl = svgEl("text", { x: (m.l + W - m.r) / 2, y: H - 8, "text-anchor": "middle", class: "axlabel", fill: "var(--muted)" });
+  xl.textContent = axisTitle(ax, "→");
+  svg.appendChild(xl);
+  const yl = svgEl("text", { x: m.l, y: m.t - 14, "text-anchor": "start", class: "axlabel", fill: "var(--ink-2)" });
+  yl.textContent = axisTitle(ay, "↑");
+  svg.appendChild(yl);
+
+  // today marker on date axes (label at the bottom, clear of the record line)
+  if (ax.scale === "time") {
+    const tx = sx.f(NOW);
+    if (tx > m.l && tx < W - m.r) {
+      svg.appendChild(svgEl("line", { x1: tx, x2: tx, y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-dasharray": "2 3" }));
+      const t = svgEl("text", { x: tx - 4, y: H - m.b - 6, "text-anchor": "end", fill: "var(--muted)", "font-size": "10" });
+      t.textContent = "today";
+      svg.appendChild(t);
+    }
+  }
+
+  // in-plot notice when points are hidden for these axes
+  if (dropped > 0) {
+    const t = svgEl("text", { x: W - m.r, y: m.t - 14, "text-anchor": "end", fill: "var(--muted)", "font-size": "11" });
+    t.textContent = `${dropped} of ${pts.length} not plotted (${reasonsStr})` +
+      (dropped / pts.length > 0.3 ? " — frontier reflects plotted models only" : "");
+    svg.appendChild(t);
+  }
+
+
+  // shared clip for anything that may run past the plot frame
+  const clip = svgEl("clipPath", { id: "plotclip" });
+  clip.appendChild(svgEl("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b }));
+  svg.appendChild(clip);
+
+  // frontier — the staircase is the empirical dominance boundary; the subject of the
+  // page is the FRONTIER we infer from it: the fitted law, solid over the observed
+  // span, dashed where it extrapolates. Time axes keep true steps — a record line
+  // really is a step function.
+  const isRecord = ax.scale === "time";
+  const front = paretoSet(usable, ax, ay);
+  const frontSet = new Set(front);
+  const ffit = isRecord ? null : fitFrontier(front, ax, ay);
+  const domY = (ay.dir === "up" || ayRev) ? H - m.b : m.t;   // the worse-y edge: everything between it and the curve is beaten
+  let drewFront = false;
+  if (isRecord) {
+    const P = [];
+    for (const p of front) {
+      const px2 = sx.f(p.px), py2 = sy.f(p.py);
+      if (!P.length || px2 - P[P.length-1][0] > 0.75) P.push([px2, py2]);
+    }
+    if (P.length > 1) {
+      let dstr = `M ${P[0][0]} ${P[0][1]}`;
+      for (let i = 1; i < P.length; i++) dstr += ` H ${P[i][0]} V ${P[i][1]}`;
+      dstr += ` H ${Math.min(W - m.r, sx.f(NOW))}`;   // record stands through today, not beyond
+      const domX = ax.dir === "up" ? m.l : W - m.r;
+      svg.appendChild(svgEl("path", { d: `${dstr} V ${domY} H ${domX} V ${P[0][1]} H ${P[0][0]} Z`, class: "frontier-fill" }));
+      svg.appendChild(svgEl("path", { d: dstr, class: "frontier-halo" }));
+      svg.appendChild(svgEl("path", { d: dstr, class: "frontier" }));
+      drewFront = true;
+      if (state.range !== "all") {
+        const fy = sy.f(front[0].py);
+        const t = svgEl("text", { x: m.l + 6, y: Math.min(fy + 18, H - m.b - 6), fill: "var(--muted)",
+                                  "font-size": "10", "text-decoration": "underline", style: "cursor:pointer" });
+        t.textContent = "older releases hidden by date filter — show all";
+        t.addEventListener("click", () => { state.range = "all"; syncControls(); render(); });
+        svg.appendChild(t);
+      }
+    }
+  } else if (ffit) {
+    const xInv = px2 => {
+      const t = (px2 - xr[0]) / (xr[1] - xr[0]);
+      return ax.scale === "log" ? Math.exp(Math.log(sx.lo) + t * (Math.log(sx.hi) - Math.log(sx.lo)))
+                                : sx.lo + t * (sx.hi - sx.lo);
+    };
+    const C = [];
+    for (let px2 = m.l; px2 <= W - m.r + 0.1; px2 += 3) {
+      const xv = xInv(px2), yv = ffit.y(xv);
+      if (!isFinite(yv)) continue;
+      C.push([px2, sy.f(yv), +xv >= ffit.xlo && +xv <= ffit.xhi]);
+    }
+    if (C.length > 1) {
+      const seg = inRange => {
+        let d = "", pen = false;
+        for (const [x2, y2, inr] of C) {
+          if (inr === inRange) { d += (pen ? " L " : " M ") + x2 + " " + y2; pen = true; }
+          else pen = false;
+        }
+        return d.trim();
+      };
+      const full = C.map(([x2, y2], i) => (i ? "L " : "M ") + x2 + " " + y2).join(" ");
+      svg.appendChild(svgEl("path", { d: `${full} V ${domY} H ${C[0][0]} Z`, class: "frontier-fill", "clip-path": "url(#plotclip)" }));
+      const dash = seg(false), solid = seg(true);
+      if (dash) svg.appendChild(svgEl("path", { d: dash, class: "frontier-ext", "clip-path": "url(#plotclip)" }));
+      if (solid) {
+        svg.appendChild(svgEl("path", { d: solid, class: "frontier-band", "clip-path": "url(#plotclip)" }));
+        svg.appendChild(svgEl("path", { d: solid, class: "frontier-halo", "clip-path": "url(#plotclip)" }));
+        svg.appendChild(svgEl("path", { d: solid, class: "frontier", "clip-path": "url(#plotclip)" }));
+      }
+      drewFront = true;
+    }
+  }
+  if (!isRecord && !ax.neutral && !ay.neutral) {
+    // orientation cues: with reversed scales these are invariant — better is always ↗
+    const worse = svgEl("text", { x: m.l + 10, y: H - m.b - 10, "text-anchor": "start", class: "regionlbl" });
+    worse.textContent = "WORSE ↙";
+    svg.appendChild(worse);
+    const better = svgEl("text", { x: W - m.r - 10, y: m.t + 16, "text-anchor": "end", class: "regionlbl", style: "fill:var(--ink-2)" });
+    better.textContent = "BETTER ↗";
+    svg.appendChild(better);
+  }
+
+  // points
+  const r = usable.length > 60 ? 4 : 5;
+  const anyStale = usable.some(isStale);
+  const ptPos = new Map();
+  for (const p of usable) {
+    const x = sx.f(p.px), y = sy.f(p.py);
+    ptPos.set(p, [x, y]);
+    const onFront = frontSet.has(p);
+    const g = svgEl("g", { class: "pt" + (onFront ? " pt-front" : " pt-dom") });
+    g.dataset.org = p.org;
+    g.dataset.lab = p.M.org || "";
+    g.dataset.name = displayName(p).toLowerCase();
+    const color = ORG_COLOR[p.org];
+    const shape = ORG_SHAPE[p.M.org];
+    // "Other" is the residual bucket, not a 4th identity: gray can't be told from the
+    // green slot under deuteranopia, so separate it by size instead of hue.
+    const pr = (p.org === "other" && !shape) ? r - 1.5 : r;
+    // frontier members sit on the page's subject line — ring them so they read first
+    if (onFront) {
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 4.5, fill: "var(--surface)" }));
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 4.5, class: "ring" }));
+    }
+    g.appendChild(marker(shape, x, y, pr, color, p.M.open_weights === true));
+    if (isStale(p))
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 3.5, fill: "none", stroke: color,
+                                      "stroke-width": 1.25, "stroke-dasharray": "2 2", opacity: 0.8 }));
+    const hit = svgEl("circle", { cx: x, cy: y, r: 12, fill: "transparent", style: "cursor:pointer" });
+    hit.addEventListener("mouseenter", () => { if (!state.pin) showTip(p, x, y, frontSet.has(p), H, false); });
+    hit.addEventListener("mouseleave", () => { if (!state.pin) hideTip(); });
+    hit.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (state.pin === pKey(p)) { state.pin = null; hideTip(true); }
+      else { state.pin = pKey(p); showTip(p, x, y, frontSet.has(p), H, true); }
+    });
+    g.appendChild(hit);
+    svg.appendChild(g);
+  }
+
+  // frontier labels: background plate + leader tick + collision boxes over ALL points
+  const boxOf = new Map(usable.map(p => {
+    const [x, y] = ptPos.get(p);
+    return [p, { x0: x - r - 2, x1: x + r + 2, y0: y - r - 2, y1: y + r + 2 }];
+  }));
+  const boxes = [...boxOf.values()];
+  // endpoints first: the frontier's extremes must be labeled even in dense views
+  const labelOrder = front.length > 2 ? [front[front.length - 1], front[0], ...front.slice(1, -1)] : [...front];
+  const labeled = [];
+  for (const p of labelOrder) {
+    const [x, y] = ptPos.get(p);
+    if (labeled.some(([lx2, ly2]) => Math.abs(x - lx2) < 14 && Math.abs(y - ly2) < 14)) continue; // merge micro-steps
+    const own = boxOf.get(p);
+    let name = displayName(p);
+    if (name.length > 34) name = name.slice(0, 33) + "…";
+    const w = name.length * 6.0 + 4, h = 13;
+    const cands = [[x + 11, y - 10, "start"], [x - 11, y - 10, "end"], [x + 11, y + 18, "start"], [x - 11, y + 18, "end"]];
+    // pass 1 prefers slots clear of neighboring points by a 6px margin, pass 2 relaxes
+    let placed = null;
+    for (const margin of [6, 0]) {
+      for (const [lx, ly, anchor] of cands) {
+        const x0 = anchor === "start" ? lx - 2 : lx - w + 2, x1 = x0 + w, y0 = ly - 10, y1 = ly + 3;
+        if (x0 < m.l || x1 > W - m.r || y0 < m.t || y1 > H - m.b) continue;
+        if (boxes.some(b => b !== own &&
+            !(x1 + margin < b.x0 || x0 - margin > b.x1 || y1 + margin < b.y0 || y0 - margin > b.y1))) continue;
+        placed = { lx, ly, anchor, x0, y0, w };
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) continue;
+    boxes.push({ x0: placed.x0, x1: placed.x0 + w, y0: placed.y0, y1: placed.y0 + h });
+    const tx = placed.anchor === "start" ? placed.lx - 2 : placed.lx + 2, ty = placed.ly - 4;
+    const dx = tx - x, dy = ty - y, len = Math.hypot(dx, dy) || 1;
+    svg.appendChild(svgEl("line", { x1: x + dx/len * (r + 1.5), y1: y + dy/len * (r + 1.5),
+                                    x2: tx, y2: ty, stroke: "var(--ink-2)", "stroke-width": 1, opacity: 0.9 }));
+    svg.appendChild(svgEl("rect", { x: placed.x0, y: placed.y0, width: w, height: h, rx: 2, class: "lblbg" }));
+    const t = svgEl("text", { x: placed.lx, y: placed.ly, class: "ptlabel", "text-anchor": placed.anchor });
+    t.textContent = name;
+    svg.appendChild(t);
+    labeled.push([x, y]);
+  }
+
+  renderFrontierReadout(front, ax, ay, isRecord, { plotted: usable.length, r2: ffit ? ffit.r2 : null });
+  funnelNote(cohortN, pts.length, usable.length, reasonsStr,
+             front.length ? `${front.length} ${isRecord ? "set the best-score-to-date record" : "on the pareto frontier"}` : "",
+             "hover/tap a point · click to pin");
+  renderEncodings(isRecord ? "record" : "scatter", drewFront, anyStale, usable.some(p => p.M.open_weights === true), !!ffit);
+  applyFade();
+}
+
+/* ---------- tooltip ---------- */
+function showTip(p, x, y, onFrontier, chartH, pinned) {
+  const tip = $("#tip");
+  const snapDate = fmtDate(parseDate(D.provenance.fetched_at));
+  const rows = [];
+  const add = (k, v, extra) => { if (v != null && v !== "—") rows.push(`<tr><td>${k}</td><td>${v}${extra ? ` <span class="age">${extra}</span>` : ""}</td></tr>`); };
+  add(humanize(bench().score_col), scoreFmt(p.v));
+  add("Scored", p.ed ? fmtDate(p.ed) : `not published (Epoch snapshot ${snapDate})`, p.ed ? ageStr(p.ed) : null);
+  add("$ / task", p.c != null ? fmtMoney(p.c) : null);
+  if (p.ot) add("Task usage", `${fmtSI(p.ot)} out-tokens${p.st ? " · " + p.st + " steps" : ""}`);
+  if (p.M.price_in != null)
+    add("$ / M in · out", `${fmtMoney(p.M.price_in)} · ${fmtMoney(p.M.price_out)}`, "as of " + snapDate);
+  add("Params (total)", p.M.params ? fmtSI(p.M.params) : null);
+  add("Train FLOP", p.M.flop ? fmtFlop(p.M.flop) : null);
+  add("Context", p.M.context ? fmtCtx(p.M.context) : null);
+  add("Released", p.M.release_date, p.rd ? ageStr(p.rd) : null);
+  if (p.M.aa) add("AA intel (0–100)", p.M.aa.intelligence_index);
+  const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : null;
+  tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${displayName(p)}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
+    <div style="color:var(--muted);margin-bottom:4px">${p.M.org || "?"}${ow ? " · " + ow : ""}${p.e && state.best ? " · " + p.e + " effort" : ""}</div>
+    <table>${rows.join("")}</table>`;
+  tip.classList.toggle("pinned", !!pinned);
+  tip.style.display = "block";
+  const closer = tip.querySelector("#tipclose");
+  if (closer) closer.addEventListener("click", () => hideTip(true));
+  const cw = $("#chart").clientWidth;
+  tip.style.left = (x + 330 > cw ? Math.max(0, x - tip.offsetWidth - 16) : x + 16) + "px";
+  tip.style.top = (y > chartH * 0.55 ? Math.max(0, y - tip.offsetHeight - 16) : y + 16) + "px";
+}
+function hideTip(force) {
+  if (state.pin && !force) return;
+  if (force) state.pin = null;
+  const tip = $("#tip");
+  tip.style.display = "none";
+  tip.classList.remove("pinned");
+}
+document.addEventListener("click", e => { if (!e.target.closest("#chart")) hideTip(true); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(true); });
+
+/* ---------- table ---------- */
+const COLS = [
+  { id: "name",   label: "Model",      get: p => displayName(p), num: false },
+  { id: "org",    label: "Lab",        get: p => p.M.org || "?", num: false },
+  { id: "e",      label: "Effort",     title: "Reasoning-effort configuration that produced this score",
+                  get: p => p.e || null, num: false },
+  { id: "score",  label: "Score",      get: p => p.v, fmt: v => scoreFmt(v), num: true },
+  { id: "c",      label: "$/task",     title: "Mean cost to run one task of this benchmark — harness-measured, includes actual token usage; see the source link above for methodology",
+                  get: p => p.c, fmt: fmtMoney, num: true },
+  { id: "pblend", label: "Blended $/M", title: "Blended token price, input:output weighted 3:1",
+                  get: p => p.M.price_in != null ? (3*p.M.price_in + p.M.price_out)/4 : null, fmt: fmtMoney, num: true },
+  { id: "pin",    label: "$/M in",     get: p => p.M.price_in, fmt: fmtMoney, num: true },
+  { id: "pout",   label: "$/M out",    get: p => p.M.price_out, fmt: fmtMoney, num: true },
+  { id: "params", label: "Params",     get: p => p.M.params, fmt: fmtSI, num: true },
+  { id: "ctx",    label: "Context",    get: p => p.M.context, fmt: fmtCtx, num: true },
+  { id: "rel",    label: "Released",   get: p => p.rd, fmt: d => d ? fmtDate(d) : "—", num: true },
+  { id: "age",    label: "Score age",  title: "Age of the eval run, where the source publishes it",
+                  get: p => p.ed, fmt: d => d ? ageStr(d) : "—", num: true },
+];
+function renderTable(pts, cohortN) {
+  const ax = effectiveAxis(AXES[state.x], pts), ay = effectiveAxis(AXES[state.y], pts);
+  const usable = axisVals(pts.slice(), ax, ay, null);
+  const front = paretoSet(usable, ax, ay);
+  const frontSet = new Set(front);
+  const tfit = fitFrontier(front, ax, ay);
+  renderFrontierReadout(front, ax, ay, ax.scale === "time", { plotted: usable.length, r2: tfit ? tfit.r2 : null });
+  renderLegend(pts);
+
+  const cols = COLS.filter(c => {
+    if (["name","org","score"].includes(c.id)) return true;
+    const filled = pts.filter(p => c.get(p) != null).length;
+    return filled > 0 && filled >= pts.length * 0.3;   // hide near-empty columns
+  });
+  const col = cols.find(c => c.id === state.sortCol) || cols.find(c => c.id === "score");
+  const sorted = [...pts].sort((a, b) => {
+    let av = col.get(a), bv = col.get(b);
+    av = av instanceof Date ? +av : av; bv = bv instanceof Date ? +bv : bv;
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return (av < bv ? -1 : av > bv ? 1 : 0) * state.sortDir;
+  });
+  const th = cols.map(c =>
+    `<th class="${c.num ? "num" : ""}" data-col="${c.id}"${c.title ? ` title="${c.title}"` : ""}>${c.label}${
+      c.id === state.sortCol ? (state.sortDir < 0 ? " ↓" : " ↑") : ' <span class="hint">↕</span>'}</th>`).join("");
+  const rows = sorted.map(p => `<tr${matchesFind(p) && state.find ? ' class="hit"' : ""}>` + cols.map(c => {
+    const v = c.get(p);
+    const txt = c.fmt ? c.fmt(v) : (v == null ? "—" : v);
+    if (c.id === "name")
+      return `<td class="name"><span class="star"${frontSet.has(p) ? ' title="on the pareto frontier for the current axes"' : ""}>${frontSet.has(p) ? "★" : ""}</span><span class="glyph">${shapeSwatch(ORG_SHAPE[p.M.org], ORG_COLOR[p.org])}</span>${txt}${p.M.open_weights === true ? " ○" : ""}</td>`;
+    return `<td class="${c.num ? "num" : ""}">${txt}</td>`;
+  }).join("") + "</tr>").join("");
+  $("#tablewrap").innerHTML = `<div style="text-align:right;margin:2px 0 6px"><button id="csv" title="Download the visible rows and columns as CSV">export CSV</button></div><table class="data"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
+  $("#csv").addEventListener("click", () => {
+    const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+    const lines = [["frontier", ...cols.map(c => c.label)].map(esc).join(",")];
+    for (const p of sorted)
+      lines.push([frontSet.has(p) ? "yes" : "", ...cols.map(c => {
+        const v = c.get(p);
+        return v instanceof Date ? fmtDate(v) : v == null ? "" : v;
+      })].map(esc).join(","));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    a.download = `pareto-${state.bench}-${fmtDate(NOW)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $("#tablewrap").querySelectorAll("th").forEach(el => el.addEventListener("click", () => {
+    const id = el.dataset.col;
+    if (state.sortCol === id) state.sortDir *= -1; else { state.sortCol = id; state.sortDir = -1; }
+    render();
+  }));
+  funnelNote(cohortN, pts.length, pts.length, "",
+             frontSet.size ? `${frontSet.size} on the pareto frontier for the current axes` : "",
+             `★ = frontier (${AXES[state.x].label()} × ${AXES[state.y].label()}) · click headers to sort`);
+  renderEncodings("table", frontSet.size > 0, pts.some(isStale), pts.some(p => p.M.open_weights === true), false);
+}
+
+/* ---------- legend / provenance / controls ---------- */
+function shapeSwatch(shape, color) {
+  const inner = {
+    circle: `<circle cx="6" cy="6" r="5" fill="${color}"/>`,
+    triangle: `<polygon points="6,1 0.7,10 11.3,10" fill="${color}"/>`,
+    tridown: `<polygon points="6,11 0.7,2 11.3,2" fill="${color}"/>`,
+    square: `<rect x="1" y="1" width="10" height="10" fill="${color}"/>`,
+    diamond: `<polygon points="6,0.5 11.5,6 6,11.5 0.5,6" fill="${color}"/>`,
+  }[shape || "circle"];
+  return `<svg width="12" height="12">${inner}</svg>`;
+}
+function renderLegend(pts) {
+  const leg = $("#legend");
+  leg.innerHTML = "";
+  const present = new Set(pts.map(p => p.org));
+  const labsPresent = new Set(pts.map(p => p.M.org));
+  const mk = (label, swatch, isOff, onClick, hoverSel) => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (isOff ? " off" : "");
+    chip.title = "click to show/hide";
+    chip.innerHTML = swatch + label;
+    chip.addEventListener("click", onClick);
+    chip.addEventListener("mouseenter", () => { state.hover = hoverSel; applyFade(); });
+    chip.addEventListener("mouseleave", () => { state.hover = null; applyFade(); });
+    leg.appendChild(chip);
+  };
+  for (const org of ["Anthropic", "OpenAI", "Google"]) {
+    if (!present.has(org) && !state.offOrgs.has(org)) continue;
+    mk(org === "Google" ? "Google DeepMind" : org,
+      shapeSwatch("circle", getComputedStyle(document.documentElement).getPropertyValue(
+        org === "Anthropic" ? "--s1" : org === "OpenAI" ? "--s2" : "--s3")),
+      state.offOrgs.has(org),
+      () => { state.offOrgs.has(org) ? state.offOrgs.delete(org) : state.offOrgs.add(org); render(); },
+      { type: "org", v: org });
+  }
+  const gray = getComputedStyle(document.documentElement).getPropertyValue("--s-other");
+  for (const lab of Object.keys(ORG_SHAPE)) {
+    if (!labsPresent.has(lab) && !state.offLabs.has(lab)) continue;
+    mk(lab, shapeSwatch(ORG_SHAPE[lab], gray), state.offLabs.has(lab),
+      () => { state.offLabs.has(lab) ? state.offLabs.delete(lab) : state.offLabs.add(lab); render(); },
+      { type: "lab", v: lab });
+  }
+  const restPresent = pts.some(p => p.org === "other" && !ORG_SHAPE[p.M.org]);
+  if (restPresent || state.offOrgs.has("other"))
+    mk("Other labs", shapeSwatch("circle", gray), state.offOrgs.has("other"),
+      () => { state.offOrgs.has("other") ? state.offOrgs.delete("other") : state.offOrgs.add("other"); render(); },
+      { type: "rest" });
+  const enc = document.createElement("span");
+  enc.id = "encodings";
+  enc.style.display = "inline-flex";
+  enc.style.gap = "16px";
+  leg.appendChild(enc);
+}
+function renderEncodings(mode, hasFrontier, hasStale, hasOpen, hasExt) {
+  const enc = $("#encodings");
+  if (!enc) return;
+  const item = (svgStr, label) => `<span class="enc">${svgStr}${label}</span>`;
+  let html = "";
+  if (hasFrontier) html += mode === "table"
+    ? item(`<span style="color:var(--ink-2)">★</span>`, "pareto frontier")
+    : item(`<svg width="19" height="12"><path d="M1 10 C 7 10 10 2 18 1.5" fill="none" stroke="var(--front)" stroke-width="2.5" stroke-linecap="round"/></svg>`,
+           mode === "record" ? "best score to date" : "estimated frontier (fit to undominated models)");
+  if (hasExt && mode !== "table") html += item(
+    `<svg width="19" height="10"><line x1="1" y1="5" x2="18" y2="5" stroke="var(--front)" stroke-width="1.5" stroke-dasharray="2 4"/></svg>`,
+    "extrapolated — no models observed there");
+  if (hasOpen) html += item(
+    `<svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/></svg>`,
+    "open weights");
+  if (hasStale) html += item(
+    `<svg width="14" height="14"><circle cx="7" cy="7" r="3" fill="var(--muted)"/><circle cx="7" cy="7" r="6" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="2 2"/></svg>`,
+    "score >90d old");
+  enc.innerHTML = html;
+}
+function applyFade() {
+  document.querySelectorAll("#chart .pt").forEach(g => {
+    let hoverFade = false;
+    if (state.hover) {
+      if (state.hover.type === "org") hoverFade = g.dataset.org !== state.hover.v;
+      else if (state.hover.type === "name") hoverFade = g.dataset.name !== state.hover.v;
+      else if (state.hover.type === "lab") hoverFade = g.dataset.lab !== state.hover.v;
+      else hoverFade = !(g.dataset.org === "other" && !ORG_SHAPE[g.dataset.lab]);
+    }
+    const findFade = state.find && !g.dataset.name.includes(state.find);
+    g.classList.toggle("faded", !!(hoverFade || findFade));
+  });
+}
+function renderProv() {
+  const P = D.provenance;
+  const fetched = parseDate(P.fetched_at);
+  const staleFetch = fetched && (NOW - fetched) > 7 * 864e5;
+  const b = bench();
+  const latestEval = parseDate(b.latest_eval);
+  const srcUrl = b.source_url || "https://epoch.ai/benchmarks";
+  $("#prov").innerHTML = `
+    <span class="pill${staleFetch ? " stale" : ""}">${staleFetch ? `Snapshot ${ageStr(fetched) || "?"} — run fetch.py` : `Snapshot fresh · ${ageStr(fetched) || "today"}`}</span>
+    <span class="meta"><b>${fmtDate(fetched)}</b> snapshot · prices from OpenRouter same day<br>
+      <b>${b.name}:</b> ${b.n} eval runs via Epoch AI${latestEval ? `, latest ${fmtDate(latestEval)} (${ageStr(latestEval)})` : ""} · <a href="${srcUrl}" target="_blank" rel="noopener">source ↗</a></span>`;
+  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Refresh data with <code>python3 fetch.py</code>.`;
+}
+function syncPresets(allPts) {
+  const have = k => allPts.filter(p => AXES[k].get(p) != null).length >= 3;
+  document.querySelectorAll("button.preset").forEach(b => {
+    b.classList.toggle("on", b.dataset.x === state.x && b.dataset.y === state.y);
+    const ok = have(b.dataset.needs);
+    // class-based disable so the explanatory title still shows on hover
+    b.classList.toggle("off", !ok);
+    b.title = ok ? "" : `fewer than 3 models on ${bench().name} have ${AXES[b.dataset.needs].short.replace(/^an? /, "")} data`;
+  });
+  $("#tab-scatter").classList.toggle("on", state.view === "scatter");
+  $("#tab-table").classList.toggle("on", state.view === "table");
+}
+function syncControls() {
+  $("#bench").value = state.bench; $("#xaxis").value = state.x; $("#yaxis").value = state.y;
+  $("#range").value = state.range; $("#weights").value = state.weights; $("#best").checked = state.best;
+}
+function renderControls() {
+  const bsel = $("#bench");
+  const feat = [], rest = [];
+  for (const b of Object.values(D.benchmarks)) (b.featured ? feat : rest).push(b);
+  rest.sort((a, b) => a.name.localeCompare(b.name));
+  feat.sort((a, b) => b.n - a.n);
+  const opt = b => {
+    const evalNote = b.latest_eval ? ` · latest ${b.latest_eval.slice(0,10)}` : "";
+    return `<option value="${b.id}">${b.name} · ${b.n} eval runs${evalNote}</option>`;
+  };
+  bsel.innerHTML = `<optgroup label="Featured">${feat.map(opt).join("")}</optgroup><optgroup label="All benchmarks">${rest.map(opt).join("")}</optgroup>`;
+
+  for (const id of ["xaxis", "yaxis"]) {
+    const sel = $("#" + id);
+    sel.innerHTML = AXIS_ORDER.map(k => `<option value="${k}">${
+      k === "score" ? "Benchmark score" :
+      k === "aa_int" ? "AA intelligence index" : AXES[k].label()
+    }</option>`).join("");
+  }
+  syncControls();
+
+  const orgs = [...new Set(Object.values(D.models).map(m => m.org).filter(Boolean))].sort();
+  const pop = $("#labspop");
+  pop.innerHTML = `<label><input type="checkbox" id="laball" checked> <b>All labs</b></label><hr style="border:none;border-top:1px solid var(--grid)">` +
+    orgs.map(o => `<label><input type="checkbox" class="lab" value="${o}" checked> ${o}</label>`).join("");
+  const sync = () => {
+    const boxes = [...pop.querySelectorAll(".lab")];
+    const on = boxes.filter(b => b.checked).map(b => b.value);
+    state.labSel = on.length === boxes.length ? null : new Set(on);
+    $("#labs").querySelector("summary").textContent = state.labSel ? `${on.length}/${boxes.length}` : "all";
+    render();
+  };
+  pop.querySelector("#laball").addEventListener("change", e => {
+    pop.querySelectorAll(".lab").forEach(b => b.checked = e.target.checked); sync();
+  });
+  pop.querySelectorAll(".lab").forEach(b => b.addEventListener("change", sync));
+
+  $("#bench").addEventListener("change", e => {
+    state.bench = e.target.value;
+    if (AXES[state.x].needsCost && !bench().has_cost) { state.x = "blended"; }
+    if (AXES[state.y].needsCost && !bench().has_cost) { state.y = "score"; }
+    syncControls(); render();
+  });
+  $("#xaxis").addEventListener("change", e => { const v = e.target.value; if (v === state.y) state.y = state.x; state.x = v; syncControls(); render(); });
+  $("#yaxis").addEventListener("change", e => { const v = e.target.value; if (v === state.x) state.x = state.y; state.y = v; syncControls(); render(); });
+  $("#range").addEventListener("change", e => { state.range = e.target.value; render(); });
+  $("#weights").addEventListener("change", e => { state.weights = e.target.value; render(); });
+  $("#best").addEventListener("change", e => { state.best = e.target.checked; render(); });
+  document.querySelectorAll("button.preset").forEach(b => b.addEventListener("click", () => {
+    if (b.classList.contains("off")) return;
+    state.x = b.dataset.x; state.y = b.dataset.y;
+    syncControls(); render();
+  }));
+  $("#tab-scatter").addEventListener("click", () => { state.view = "scatter"; render(); });
+  $("#tab-table").addEventListener("click", () => { state.view = "table"; render(); });
+  let findT;
+  $("#find").addEventListener("input", e => {
+    state.find = e.target.value.trim().toLowerCase();
+    clearTimeout(findT);
+    findT = setTimeout(() => state.view === "table" ? render() : applyFade(), 120);
+  });
+  $("#copylink").addEventListener("click", async () => {
+    const btn = $("#copylink");
+    try { await navigator.clipboard.writeText(location.href); btn.textContent = "copied ✓"; }
+    catch (e) { btn.textContent = "copy failed"; }
+    setTimeout(() => btn.textContent = "copy link", 1400);
+  });
+  document.addEventListener("click", e => { const d = $("#labs"); if (d.open && !d.contains(e.target)) d.open = false; });
+}
+
+let resizeT;
+window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(render, 120); });
+window.addEventListener("hashchange", () => { readHash(); syncControls(); render(); });
+
+renderControls();
+render();
+</script>
+</body>
+</html>

@@ -63,8 +63,10 @@ What landed (all in `index.html`):
 - Dominated points recede to 45% opacity; frontier stroke 3px over a 6.5px halo.
 - Verified: 6,660 benchmark × axis combos, zero errors; both themes.
 
-## Roadmap (usability review 2026-08-07 — site is SHARED now; per deploy: run the
-## 6,660-combo sweep, never break URL-hash back-compat)
+## Roadmap (usability review 2026-08-07)
+
+The site is shared now. Preserve URL-hash backward compatibility and run the
+current browser audit before releases.
 
 Facts behind the review: evaluation dates are sparse and must never be inferred;
 the pipeline now recognizes source timestamps including Epoch-internal `Started at`
@@ -99,8 +101,9 @@ Steal-list sources for later: artificialanalysis.ai (superlative cards,
 estimated-* flags), llm-stats.com (compare flow), epoch.ai/benchmarks,
 deepswe.datacurve.ai (version toggle).
 
-Verification ritual per deploy (site is shared): 13,320-combo sweep (all
-benchmarks × axis pairs × fonly on/off) with a window error trap, plus eyeball
+Verification ritual per deploy (site is shared): the 49,728-state full sweep in
+`scripts/audit_browser.py --full` (all benchmarks × axis pairs × views, plus
+range/weights/best/frontier-only filters) with a window error trap, plus eyeball
 of tooltip/readout/table in the browser. Preview against the Go server
 (`go build && ./pareto -root . -every 0`), NOT python http.server — python
 sends no cache headers and Chrome's heuristic cache serves stale data.js
@@ -125,10 +128,10 @@ sends no cache headers and Chrome's heuristic cache serves stale data.js
 
 ## Evidence + availability pass (2026-08-08)
 
-- The page remains a data workbench, not a chatbot. A benchmark search control and
+- The page remains a data workbench, not a chatbot. A searchable benchmark combobox and
   compact evidence strip expose model/run counts plus date, uncertainty, trace,
   resource-metric, and version coverage before the chart is interpreted.
-- Evaluation date is an axis and record-line preset. Artificial Analysis coding
+- Evaluation date is an axis and best-observed-score history preset. Artificial Analysis coding
   and agentic indices join the existing intelligence axis. Dominated point details
   name a nearby observation that is at least as good on both current axes.
 - Source timestamps, additional uncertainty schemas, METR versions, run logs,
@@ -141,9 +144,27 @@ sends no cache headers and Chrome's heuristic cache serves stale data.js
   independently of the page. GitHub Actions verifies Go, frontend syntax, OpenAPI,
   snapshot parity, and data invariants.
 
+## Exhaustive interaction pass (2026-08-08)
+
+- Benchmark search and selection are one grouped, keyboard-accessible combobox.
+  The no-hash default is DeepSWE mean reported cost/task vs score, last 12 months,
+  all weights, best configuration.
+- “Eval records” is now “eval date vs score” and is described as best observed
+  score as evaluation dates advance. It is available only when a benchmark has
+  at least three dated observations across at least two distinct dates; DeepSWE's
+  53 same-day runs no longer produce a one-point pseudo-history.
+- Unavailable axes and presets are disabled per benchmark, time belongs on X, and
+  stale or invalid bookmarked pairs fall back to a meaningful supported pair.
+- Regression paths discard values outside their visible scale and uncertainty bars
+  clamp to the visible/log-safe domain. This prevents non-finite SVG coordinates on
+  extreme context/price fits and score intervals that cross zero.
+- `scripts/audit_browser.py` is the release gate: quick mode covers all 11,544
+  ordered benchmark/axis scatter combinations; full mode covers 49,728 rendered
+  axis, view, and filter states.
+
 ## History
 
 A claude.ai artifact build of this page exists (see memory `pareto-artifact-url`)
 — it was a mis-aimed deliverable, superseded by pareto.ehrlich.dev. Ignore it
-unless Bryan asks. Deploy is `./deploy.sh`; DNS record for the subdomain was still
-pending in Cloudflare as of 2026-08-05.
+unless Bryan asks. Deploy is `./deploy.sh`; the Cloudflare-backed production site
+is live at pareto.ehrlich.dev.

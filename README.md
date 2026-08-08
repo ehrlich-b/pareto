@@ -33,11 +33,15 @@ Any of these on X or Y (log-scaled where it matters): benchmark score, $ per tas
 (where the benchmark measured it), blended/input/output $/M tokens, release or
 evaluation date, parameters, training FLOP, context window, and AA intelligence,
 coding, or agentic index. The pareto frontier staircase is computed live for whatever pair is selected — on time axes it
-becomes a best-score-to-date record line that stops at today. State lives in the URL
-hash (copy-view-link button), so views are shareable/bookmarkable.
+becomes a best-observed-score history that advances only across distinct, source-published
+evaluation or release dates and stops at today. Benchmarks with only one distinct date do
+not offer a misleading history view. State lives in the URL hash (copy-view-link button),
+so views are shareable/bookmarkable. The default view is DeepSWE mean reported cost per
+task vs benchmark score over the latest 12 months.
 
-Viewer: search benchmarks directly; click or keyboard-focus a point for its evidence;
-pin tooltips; use `find model…` to highlight; and use legend chips to toggle labs.
+Viewer: search or browse all benchmarks in one keyboard-accessible combobox; unavailable
+axes are disabled for the selected benchmark. Click or keyboard-focus a point for its
+evidence; pin tooltips; use `find model…` to highlight; and use legend chips to toggle labs.
 Dominated points name a nearby model that beats them on both selected axes. Table view
 sorts, shows source resource/trace fields when sufficiently covered, and exports CSV.
 Color = Anthropic/OpenAI/Google
@@ -114,9 +118,13 @@ go vet ./...
 go run . -fetch
 node scripts/check_snapshot.mjs
 node scripts/check_frontend.mjs
+# Optional release audit (requires Python Playwright + Chromium):
+python3 scripts/audit_browser.py --full http://127.0.0.1:8082
 ```
 
 Tests cover revision identity, configuration preservation, cost/uncertainty
 semantics, evaluation timestamps, trace/resource preservation, explicit Epoch
 mappings, OpenRouter route selection, API filters/pagination, and quality-gate
-failure behavior. The same checks run in GitHub Actions.
+failure behavior. The browser audit renders every benchmark/axis pair plus all
+range, weight, best-configuration, frontier-only, scatter, and table states. The
+same non-browser checks run in GitHub Actions.

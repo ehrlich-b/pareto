@@ -15,4 +15,17 @@ for (const [, attrs, source] of scripts) {
 }
 for (const file of ["openapi.json"]) JSON.parse(fs.readFileSync(file, "utf8"));
 if (checked === 0) throw new Error("no inline application script checked");
+const required = [
+  ['id="benchcombo"', "searchable benchmark combobox"],
+  ['bench: "deepswe", x: "taskcost", y: "score", range: "12"', "DeepSWE cost/score default"],
+  ['data-x="eval_date" data-y="score"', "evaluation-date history preset"],
+  ["function ensureValidAxes()", "per-benchmark axis validation"],
+  ["function projectBound(scale, ax, value)", "safe uncertainty projection"],
+];
+for (const [needle, feature] of required) {
+  if (!html.includes(needle)) throw new Error(`missing ${feature}`);
+}
+for (const legacy of ['id="benchfind"', '>eval records<']) {
+  if (html.includes(legacy)) throw new Error(`legacy control/copy remains: ${legacy}`);
+}
 console.log(`frontend ok: ${checked} inline script parsed · OpenAPI JSON valid`);

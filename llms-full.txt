@@ -32,7 +32,7 @@ Resource metrics use readable keys and explicit units: token counts are normaliz
 
 ## Frontier semantics
 
-For two axes, observation A dominates B when A is at least as good on both axes and strictly better on one. Higher benchmark score, context, and capability indices are better. Lower price, cost, parameter count, compute, and dates are treated as efficient. Date-versus-score views therefore produce historical record holders. Missing values are excluded from that axis pair and coverage is reported.
+For two axes, observation A dominates B when A is at least as good on both axes and strictly better on one. Higher benchmark score, context, and capability indices are better. Lower price, cost, parameter count, compute, and dates are treated as efficient. Date-versus-score views therefore show the best observed score as distinct source-published evaluation or release dates advance; a benchmark needs at least three dated observations across two distinct dates for this history. Missing values are excluded from that axis pair and coverage is reported.
 
 The browser's smooth line is a visual fit through empirical undominated points; the undominated points themselves are the data. Confidence intervals are displayed but current frontier membership uses point estimates. Filters, model-configuration summarization, and axis selection change the comparison cohort and therefore can change membership.
 

@@ -105,6 +105,23 @@ of tooltip/readout/table in the browser. Preview against the Go server
 sends no cache headers and Chrome's heuristic cache serves stale data.js
 (hard-reload to recover).
 
+## Data-integrity pass (shipped 2026-08-08)
+
+- Observations are lossless: exact model revisions, source ids/links, benchmark
+  versions, configuration dimensions, cost semantics, dates, and uncertainty are
+  retained. The old unconditional `(model, effort) -> maximum score` dedupe is gone.
+- Reported-cost axes always include every configuration. "Best configuration"
+  remains available for non-cost views only.
+- OpenRouter joins are exact-revision or explicit-alias only; batch/free/thinking
+  routes and ambiguous keys are withheld.
+- Epoch score/cost/uncertainty columns are explicit contracts. Unknown schemas are
+  quarantined and visible in `data/quality.json`.
+- Publication is gated on counts, observation identity, dates, schema continuity,
+  and live DeepSWE completeness/freshness. `data.js` remains the final atomic
+  commit marker.
+- Snapshot fetch age, evaluation age, and source fallback status are distinct in
+  the UI. Unknown evaluation dates never render as fresh.
+
 ## History
 
 A claude.ai artifact build of this page exists (see memory `pareto-artifact-url`)

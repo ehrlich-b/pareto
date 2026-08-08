@@ -109,6 +109,7 @@ header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap
   content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .75;
 }
 .prov .pill.stale { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.prov .pill.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
 .prov .meta { font-size: 11.5px; text-align: right; max-width: 42ch; }
 .prov a { color: var(--ink-2); }
 
@@ -213,6 +214,8 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 .pt-dom:hover { opacity: 1; }
 .pt.faded { opacity: .12; }
 .pt-front .ring { fill: none; stroke: var(--front); stroke-width: 1.6; }
+.errbar { stroke: var(--muted); stroke-width: 1.15; opacity: .75; }
+.unknown-age { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 1 3; opacity: .75; }
 #tip.pinned { pointer-events: auto; }
 #tip {
   position: absolute; z-index: 40; pointer-events: none; display: none;
@@ -274,7 +277,7 @@ footer code { font: 11.5px var(--mono); }
     <header class="lede">
       <div class="eyebrow">Pareto frontier · multi-benchmark</div>
       <h1>AI Pareto Explorer</h1>
-      <div class="sub">Pick any two axes across ~75 benchmarks — the frontier recomputes live, and each point carries its sources and dates: eval date where published, snapshot date otherwise.</div>
+      <div class="sub">Pick any two axes across ~75 benchmarks — the frontier recomputes live, with source, configuration, uncertainty, and evaluation age preserved wherever published.</div>
     </header>
     <div class="prov" id="prov"></div>
   </div>
@@ -307,7 +310,7 @@ footer code { font: 11.5px var(--mono); }
         <option value="open">open only</option>
         <option value="closed">closed only</option>
       </select></label>
-      <label class="chk" title="Keeps only the highest-scoring reasoning-effort configuration of each model. Uncheck to see every configuration — cheap low-effort configs often sit on the real cost frontier."><input type="checkbox" id="best" checked> best reasoning-effort config only</label>
+      <label class="chk" id="bestlabel" title="Keeps only the highest-scoring configuration of each exact model revision. Cost axes always keep every configuration so the real cost frontier is preserved."><input type="checkbox" id="best" checked> best configuration only</label>
       <label class="chk" title="Hide every dominated model — declutters dense benchmarks; the frontier itself is unchanged"><input type="checkbox" id="fonly"> frontier only</label>
       <span class="sep"></span>
       <input type="text" id="find" placeholder="find model…" title="Highlights matching models in the chart and table">
@@ -369,6 +372,7 @@ function ageStr(d) {
 }
 const parseDate = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d : null; };
 const humanize = s => { s = s.replace(/_/g, " "); return s[0].toUpperCase() + s.slice(1); };
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 /* per-benchmark score units where the raw column name isn't self-explanatory */
 const UNITS = { metr_time_horizons: "human-task minutes", ale_bench: "rating", algotune: "speedup ×" };
@@ -377,7 +381,7 @@ const UNITS = { metr_time_horizons: "human-task minutes", ale_bench: "rating", a
 const AXES = {
   score:   { label: () => scoreLabel(), short: "a score", dir: "up", scale: "linear",
              get: p => p.v, fmt: v => scoreFmt(v), tick: v => scoreTick(v) },
-  taskcost:{ label: () => "$ per task", short: "$/task", dir: "down", scale: "log",
+  taskcost:{ label: () => bench().cost_label || "Reported cost (USD)", short: "a reported cost", dir: "down", scale: "log",
              get: p => p.c, fmt: fmtMoney, tick: fmtMoneyTick, needsCost: true },
   blended: { label: () => "Blended $/M tokens (3:1 in:out)", short: "a price", dir: "down", scale: "log",
              get: p => p.M.price_in != null ? (3*p.M.price_in + p.M.price_out)/4 : null, fmt: fmtMoney, tick: fmtMoneyTick },
@@ -441,22 +445,18 @@ function scoreTick(v) { return benchIsPct ? Math.round(100*v) + "%" : scoreFmt(v
 
 /* ---------- point building ---------- */
 let benchRawN = 0;
+const costAxisActive = () => state.x === "taskcost" || state.y === "taskcost";
+const bestModeActive = () => state.best && !costAxisActive();
 function cohort() {
   const rows = D.scores.filter(s => s.b === state.bench);
   benchRawN = rows.length;
   const max = rows.reduce((m, r) => Math.max(m, r.v), -Infinity);
   benchIsPct = max <= 1.2;
-  const byKey = new Map();                       // dedupe identical (model, effort)
-  for (const r of rows) {
-    const k = r.m + "|" + (r.e || "");
-    const prev = byKey.get(k);
-    if (!prev || r.v > prev.v) byKey.set(k, r);
-  }
-  let pts = [...byKey.values()].map(r => {
+  let pts = rows.map(r => {
     const M = D.models[r.m] || {};
-    return { ...r, M, org: orgKey(M.org), rd: parseDate(M.release_date), ed: parseDate(r.d) };
+    return { ...r, M, org: orgKey(M.org), rd: parseDate(r.rd || M.release_date), ed: parseDate(r.d) };
   });
-  if (state.best) {
+  if (bestModeActive()) {
     const byM = new Map();
     for (const p of pts) { const prev = byM.get(p.m); if (!prev || p.v > prev.v) byM.set(p.m, p); }
     pts = [...byM.values()];
@@ -480,10 +480,22 @@ function filtered(pts) {
 }
 function displayName(p) {
   let n = p.M.display || p.m;
-  if (!state.best && p.e) n += " (" + p.e + ")";
+  const cfg = configLabel(p);
+  if (!bestModeActive() && cfg) n += " (" + cfg + ")";
   return n;
 }
-const pKey = p => p.m + "|" + (p.e || "");
+function configLabel(p) {
+  if (!p.cfg) return p.e || "";
+  const order = ["effort","reasoning","agent","harness","tools","scaffold","budget","shots","provider","format"];
+  const seen = new Set(), parts = [];
+  for (const k of order) {
+    const v = p.cfg[k];
+    if (v == null || v === "" || seen.has(String(v).toLowerCase())) continue;
+    seen.add(String(v).toLowerCase()); parts.push(String(v));
+  }
+  return parts.join(" · ");
+}
+const pKey = p => p.oid || (p.m + "|" + JSON.stringify(p.cfg || {}) + "|" + p.v);
 const matchesFind = p => !state.find || displayName(p).toLowerCase().includes(state.find);
 
 /* ---------- pareto ---------- */
@@ -624,6 +636,19 @@ function effectiveAxis(ax, pts) {
 
 const STALE_MS = 90 * 864e5;
 const isStale = p => p.ed && (NOW - p.ed) > STALE_MS;
+function scoreBounds(p) {
+  if (typeof p.lo === "number" && typeof p.hi === "number") return [p.lo, p.hi];
+  if (typeof p.ci === "number") return [p.v - p.ci, p.v + p.ci];
+  if (typeof p.se === "number") return [p.v - 1.96*p.se, p.v + 1.96*p.se];
+  return null;
+}
+function uncertaintyText(p) {
+  if (typeof p.lo === "number" && typeof p.hi === "number") return `${scoreFmt(p.lo)}–${scoreFmt(p.hi)} · 95% CI`;
+  if (typeof p.ci === "number") return `±${benchIsPct ? (100*p.ci).toFixed(1)+" pp" : +p.ci.toPrecision(3)} · 95% CI`;
+  if (typeof p.se === "number") return `${benchIsPct ? (100*p.se).toFixed(1)+" pp" : +p.se.toPrecision(3)} · standard error`;
+  if (typeof p.sd === "number") return `${benchIsPct ? (100*p.sd).toFixed(1)+" pp" : +p.sd.toPrecision(3)} · standard deviation`;
+  return null;
+}
 const reasonText = (reasons, ax, ay) => {
   const parts = [];
   if (reasons.x) parts.push(`${reasons.x} lack ${ax.short}`);
@@ -689,6 +714,8 @@ function renderFrontierReadout(front, ax, ay, isRecord, extra) {
     const le = parseDate(bench().latest_eval);
     if (le) stats.push(st("evals thru", fmtDate(le),
       "Latest published evaluation date on this benchmark — most Epoch benchmarks publish no per-run dates"));
+    stats.push(st("dated runs", `${bench().dated_n || 0}/${bench().n}`,
+      "Runs with a source-published evaluation date; unknown dates are never treated as fresh"));
   }
   const head = `<div class="rhead"><span class="rtitle">${bench().name}</span>` +
     `<span class="raxes">${axName(ay, "↑")} × ${axName(ax, "→")}</span>` +
@@ -704,9 +731,9 @@ function renderFrontierReadout(front, ax, ay, isRecord, extra) {
   };
   const chips = front.map(p => {
     const nm = displayName(p);
-    return `<span class="fchip" data-name="${nm.toLowerCase().replace(/"/g, "&quot;")}">` +
+    return `<span class="fchip" data-name="${escHtml(nm.toLowerCase())}">` +
       `<span style="width:8px;height:8px;border-radius:50%;background:${ORG_COLOR[p.org]};flex:none"></span>` +
-      `${nm}<span class="fval">${fmtAx(ax, p)} · ${fmtAx(ay, p)}</span></span>`;
+      `${escHtml(nm)}<span class="fval">${escHtml(fmtAx(ax, p))} · ${escHtml(fmtAx(ay, p))}</span></span>`;
   }).join("");
   el.innerHTML = head +
     `<span class="rlist"><span class="rlabel">${isRecord ? "Record holders" : "On the frontier"}</span>${chips}</span>`;
@@ -718,7 +745,7 @@ function renderFrontierReadout(front, ax, ay, isRecord, extra) {
 
 function funnelNote(cohortN, filteredN, shown, reasonsStr, frontStr, extra) {
   const bits = [`${benchRawN} eval runs`,
-                `${cohortN} ${state.best ? "models (best config)" : "configs"}`,
+                `${cohortN} ${bestModeActive() ? "exact model revisions (best config)" : "configs"}`,
                 `${cohortN - filteredN} hidden by filters`];
   if (reasonsStr) bits.push(reasonsStr);
   bits.push(`<b>${shown}</b> ${state.view === "scatter" ? "plotted" : "listed"}`);
@@ -920,10 +947,24 @@ function renderScatter(pts, cohortN) {
       g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 4.5, fill: "var(--surface)" }));
       g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 4.5, class: "ring" }));
     }
+    const bounds = scoreBounds(p);
+    if (bounds && ay.get === AXES.score.get) {
+      const y0 = sy.f(bounds[0]), y1 = sy.f(bounds[1]);
+      g.appendChild(svgEl("line", { x1: x, x2: x, y1: y0, y2: y1, class: "errbar" }));
+      g.appendChild(svgEl("line", { x1: x-3, x2: x+3, y1: y0, y2: y0, class: "errbar" }));
+      g.appendChild(svgEl("line", { x1: x-3, x2: x+3, y1: y1, y2: y1, class: "errbar" }));
+    } else if (bounds && ax.get === AXES.score.get) {
+      const x0 = sx.f(bounds[0]), x1 = sx.f(bounds[1]);
+      g.appendChild(svgEl("line", { x1: x0, x2: x1, y1: y, y2: y, class: "errbar" }));
+      g.appendChild(svgEl("line", { x1: x0, x2: x0, y1: y-3, y2: y+3, class: "errbar" }));
+      g.appendChild(svgEl("line", { x1: x1, x2: x1, y1: y-3, y2: y+3, class: "errbar" }));
+    }
     g.appendChild(marker(shape, x, y, pr, color, p.M.open_weights === true));
     if (isStale(p))
       g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 3.5, fill: "none", stroke: color,
                                       "stroke-width": 1.25, "stroke-dasharray": "2 2", opacity: 0.8 }));
+    if (!p.ed)
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 3.5, class: "unknown-age" }));
     const hit = svgEl("circle", { cx: x, cy: y, r: 12, fill: "transparent", style: "cursor:pointer" });
     hit.addEventListener("mouseenter", () => { if (!state.pin) showTip(p, x, y, frontSet.has(p), H, false); });
     hit.addEventListener("mouseleave", () => { if (!state.pin) hideTip(); });
@@ -983,7 +1024,8 @@ function renderScatter(pts, cohortN) {
   funnelNote(cohortN, pts.length, usable.length, reasonsStr,
              front.length ? `${front.length} ${isRecord ? "set the best-score-to-date record" : "on the pareto frontier"}${state.fonly ? " — dominated points hidden" : ""}` : "",
              "hover/tap a point · click to pin");
-  renderEncodings(isRecord ? "record" : "scatter", drewFront, anyStale, usable.some(p => p.M.open_weights === true), !!ffit);
+  renderEncodings(isRecord ? "record" : "scatter", drewFront, anyStale, usable.some(p => p.M.open_weights === true), !!ffit,
+                  usable.some(p => !p.ed), usable.some(p => scoreBounds(p) || p.sd != null));
   applyFade();
 }
 
@@ -992,7 +1034,9 @@ function showTip(p, x, y, onFrontier, chartH, pinned) {
   const tip = $("#tip");
   const snapDate = fmtDate(parseDate(D.provenance.fetched_at));
   const rows = [];
-  const add = (k, v, extra) => { if (v != null && v !== "—") rows.push(`<tr><td>${k}</td><td>${v}${extra ? ` <span class="age">${extra}</span>` : ""}</td></tr>`); };
+  const add = (k, v, extra) => { if (v != null && v !== "—") rows.push(`<tr><td>${escHtml(k)}</td><td>${escHtml(v)}${extra ? ` <span class="age">${escHtml(extra)}</span>` : ""}</td></tr>`); };
+  const cfg = configLabel(p);
+  if (cfg) add("Configuration", cfg);
   if (p.ot) add("Task usage", `${fmtSI(p.ot)} out-tokens${p.st ? " · " + p.st + " steps" : ""}`);
   if (p.M.price_in != null) {
     // price movement vs the ~week-old snapshot the server keeps in price_prev
@@ -1008,20 +1052,25 @@ function showTip(p, x, y, onFrontier, chartH, pinned) {
   add("Params (total)", p.M.params ? fmtSI(p.M.params) : null);
   add("Train FLOP", p.M.flop ? fmtFlop(p.M.flop) : null);
   add("Context", p.M.context ? fmtCtx(p.M.context) : null);
-  add("Released", p.M.release_date, p.rd ? ageStr(p.rd) : null);
+  add("Released", p.rd ? fmtDate(p.rd) : null, p.rd ? ageStr(p.rd) : null);
   if (p.M.aa) add("AA intel (0–100)", p.M.aa.intelligence_index);
-  const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : null;
+  const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : "weights unknown";
   // the two axis-defining numbers lead; everything else is reference material
-  const ci = p.ci && benchIsPct ? `<span class="ci">±${(p.ci * 100).toFixed(1)}</span>` : "";
-  const hero = `<div class="tip-hero"><span class="hv">${scoreFmt(p.v)}${ci}<span class="hk">${humanize(bench().score_col)}${ci ? " · 95% ci" : ""}</span></span>` +
-    (p.c != null ? `<span class="hv">${fmtMoney(p.c)}<span class="hk">$ / task</span></span>` : "") + `</div>`;
+  const uncertainty = uncertaintyText(p);
+  const hero = `<div class="tip-hero"><span class="hv">${escHtml(scoreFmt(p.v))}<span class="hk">${escHtml(humanize(bench().score_col))}</span></span>` +
+    (p.c != null ? `<span class="hv">${fmtMoney(p.c)}<span class="hk">${escHtml(bench().cost_label || "reported cost")}</span></span>` : "") + `</div>`;
+  if (uncertainty) add("Uncertainty", uncertainty);
+  if (p.sm) add("Source model ID", p.sm);
+  if (p.bv) add("Benchmark version", p.bv);
+  const sourceURL = p.src || bench().source_url;
   const prov = `<div class="tip-prov">${p.ed
     ? `evaluated ${fmtDate(p.ed)} (${ageStr(p.ed)})`
-    : `eval date not published by source — score via Epoch snapshot ${snapDate}`}` +
-    (p.M.price_in != null ? ` · prices as of ${snapDate}` : "") + `</div>`;
+    : `evaluation date unknown — snapshot fetched ${snapDate}`}` +
+    (p.M.price_in != null ? ` · prices fetched ${snapDate} via ${escHtml(p.M.price_match || "OpenRouter")}` : "") +
+    (sourceURL ? ` · <a href="${escHtml(sourceURL)}" target="_blank" rel="noopener">source ↗</a>` : "") + `</div>`;
   const isNew = p.rd && (NOW - p.rd) < 30 * 864e5;
-  tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${displayName(p)}${isNew ? ' <span class="newtag">new</span>' : ""}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
-    <div style="color:var(--muted);margin-bottom:4px">${p.M.org || "?"}${ow ? " · " + ow : ""}${p.e && state.best ? " · " + p.e + " effort" : ""}</div>
+  tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${escHtml(displayName(p))}${isNew ? ' <span class="newtag">new</span>' : ""}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
+    <div style="color:var(--muted);margin-bottom:4px">${escHtml(p.M.org || "organization unknown")} · ${escHtml(ow)}</div>
     ${hero}<table>${rows.join("")}</table>${prov}`;
   tip.classList.toggle("pinned", !!pinned);
   tip.style.display = "block";
@@ -1045,10 +1094,12 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(true
 const COLS = [
   { id: "name",   label: "Model",      get: p => displayName(p), num: false },
   { id: "org",    label: "Lab",        get: p => p.M.org || "?", num: false },
-  { id: "e",      label: "Effort",     title: "Reasoning-effort configuration that produced this score",
-                  get: p => p.e || null, num: false },
+  { id: "config", label: "Configuration", title: "Source-published effort, agent, harness, tools, budget, shots, provider, or edit format",
+                  get: p => configLabel(p) || null, num: false },
   { id: "score",  label: "Score",      get: p => p.v, fmt: v => scoreFmt(v), num: true },
-  { id: "c",      label: "$/task",     title: "Mean cost to run one task of this benchmark — harness-measured, includes actual token usage; see the source link above for methodology",
+  { id: "unc",    label: "Uncertainty", title: "Source-published confidence interval, standard error, or standard deviation",
+                  get: p => uncertaintyText(p), num: false },
+  { id: "c",      label: "Reported cost", title: "Uses the source's stated denominator; see the benchmark header and source for methodology",
                   get: p => p.c, fmt: fmtMoney, num: true },
   { id: "pblend", label: "Blended $/M", title: "Blended token price, input:output weighted 3:1",
                   get: p => p.M.price_in != null ? (3*p.M.price_in + p.M.price_out)/4 : null, fmt: fmtMoney, num: true },
@@ -1085,24 +1136,25 @@ function renderTable(pts, cohortN) {
     if (bv == null) return -1;
     return (av < bv ? -1 : av > bv ? 1 : 0) * state.sortDir;
   });
+  const colLabel = c => c.id === "c" ? (bench().cost_label || c.label) : c.label;
   const th = cols.map(c =>
-    `<th class="${c.num ? "num" : ""}" data-col="${c.id}"${c.title ? ` title="${c.title}"` : ""}>${c.label}${
+    `<th class="${c.num ? "num" : ""}" data-col="${c.id}"${c.title ? ` title="${escHtml(c.title)}"` : ""}>${escHtml(colLabel(c))}${
       c.id === state.sortCol ? (state.sortDir < 0 ? " ↓" : " ↑") : ' <span class="hint">↕</span>'}</th>`).join("");
   const rows = sorted.map(p => `<tr${matchesFind(p) && state.find ? ' class="hit"' : ""}>` + cols.map(c => {
     const v = c.get(p);
     const txt = c.fmt ? c.fmt(v) : (v == null ? "—" : v);
     if (c.id === "name")
-      return `<td class="name"><span class="star"${frontSet.has(p) ? ' title="on the pareto frontier for the current axes"' : ""}>${frontSet.has(p) ? "★" : ""}</span><span class="glyph">${shapeSwatch(ORG_SHAPE[p.M.org], ORG_COLOR[p.org])}</span>${txt}${p.M.open_weights === true ? " ○" : ""}${p.rd && (NOW - p.rd) < 30 * 864e5 ? ' <span class="newtag">new</span>' : ""}</td>`;
+      return `<td class="name"><span class="star"${frontSet.has(p) ? ' title="on the pareto frontier for the current axes"' : ""}>${frontSet.has(p) ? "★" : ""}</span><span class="glyph">${shapeSwatch(ORG_SHAPE[p.M.org], ORG_COLOR[p.org])}</span>${escHtml(txt)}${p.M.open_weights === true ? " ○" : ""}${p.rd && (NOW - p.rd) < 30 * 864e5 ? ' <span class="newtag">new</span>' : ""}</td>`;
     if (c.id === "score" && maxScore > 0 && typeof v === "number" && v > 0) {
       const w = Math.min(100, 100 * v / maxScore).toFixed(1);
       return `<td class="num" style="background:linear-gradient(to right, var(--front-fill) ${w}%, transparent ${w}%)">${txt}</td>`;
     }
-    return `<td class="${c.num ? "num" : ""}">${txt}</td>`;
+    return `<td class="${c.num ? "num" : ""}">${escHtml(txt)}</td>`;
   }).join("") + "</tr>").join("");
   $("#tablewrap").innerHTML = `<div style="text-align:right;margin:2px 0 6px"><button id="csv" title="Download the visible rows and columns as CSV">export CSV</button></div><table class="data"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
   $("#csv").addEventListener("click", () => {
     const esc = s => `"${String(s).replace(/"/g, '""')}"`;
-    const lines = [["frontier", ...cols.map(c => c.label)].map(esc).join(",")];
+    const lines = [["frontier", ...cols.map(colLabel)].map(esc).join(",")];
     for (const p of sorted)
       lines.push([frontSet.has(p) ? "yes" : "", ...cols.map(c => {
         const v = c.get(p);
@@ -1122,7 +1174,8 @@ function renderTable(pts, cohortN) {
   funnelNote(cohortN, pts.length, pts.length, "",
              frontSet.size ? `${frontSet.size} on the pareto frontier for the current axes` : "",
              `★ = frontier (${AXES[state.x].label()} × ${AXES[state.y].label()}) · click headers to sort`);
-  renderEncodings("table", frontSet.size > 0, pts.some(isStale), pts.some(p => p.M.open_weights === true), false);
+  renderEncodings("table", frontSet.size > 0, pts.some(isStale), pts.some(p => p.M.open_weights === true), false,
+                  pts.some(p => !p.ed), pts.some(p => scoreBounds(p) || p.sd != null));
 }
 
 /* ---------- legend / provenance / controls ---------- */
@@ -1178,7 +1231,7 @@ function renderLegend(pts) {
   enc.style.gap = "16px";
   leg.appendChild(enc);
 }
-function renderEncodings(mode, hasFrontier, hasStale, hasOpen, hasExt) {
+function renderEncodings(mode, hasFrontier, hasStale, hasOpen, hasExt, hasUnknownAge, hasUncertainty) {
   const enc = $("#encodings");
   if (!enc) return;
   const item = (svgStr, label) => `<span class="enc">${svgStr}${label}</span>`;
@@ -1196,6 +1249,12 @@ function renderEncodings(mode, hasFrontier, hasStale, hasOpen, hasExt) {
   if (hasStale) html += item(
     `<svg width="14" height="14"><circle cx="7" cy="7" r="3" fill="var(--muted)"/><circle cx="7" cy="7" r="6" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="2 2"/></svg>`,
     "score >90d old");
+  if (hasUnknownAge) html += item(
+    `<svg width="14" height="14"><circle cx="7" cy="7" r="3" fill="var(--muted)"/><circle cx="7" cy="7" r="6" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/></svg>`,
+    "evaluation age unknown");
+  if (hasUncertainty) html += item(
+    `<svg width="14" height="14"><line x1="7" x2="7" y1="1" y2="13" stroke="var(--muted)"/><line x1="4" x2="10" y1="1" y2="1" stroke="var(--muted)"/><line x1="4" x2="10" y1="13" y2="13" stroke="var(--muted)"/></svg>`,
+    "source uncertainty available");
   enc.innerHTML = html;
 }
 function applyFade() {
@@ -1218,11 +1277,20 @@ function renderProv() {
   const b = bench();
   const latestEval = parseDate(b.latest_eval);
   const srcUrl = b.source_url || "https://epoch.ai/benchmarks";
+  const degraded = b.source_status === "degraded";
+  const qWarnings = D.quality && Array.isArray(D.quality.warnings) ? D.quality.warnings.length : 0;
+  const warn = degraded || qWarnings > 0;
+  const pill = staleFetch ? `Snapshot fetch stale · ${ageStr(fetched) || "?"}` :
+               degraded ? "Source fallback active" :
+               qWarnings ? `Checks passed · ${qWarnings} warning${qWarnings === 1 ? "" : "s"}` :
+               `Snapshot fetched · ${ageStr(fetched) || "today"}`;
+  const dated = b.dated_n || 0;
+  const evalText = latestEval ? `latest dated run ${fmtDate(latestEval)} (${ageStr(latestEval)})` : "evaluation dates unavailable";
   $("#prov").innerHTML = `
-    <span class="pill${staleFetch ? " stale" : ""}">${staleFetch ? `Snapshot stale · ${ageStr(fetched) || "?"}` : `Snapshot fresh · ${ageStr(fetched) || "today"}`}</span>
-    <span class="meta"><b>${fmtDate(fetched)}</b> snapshot · prices from OpenRouter same day<br>
-      <b>${b.name}:</b> ${b.n} eval runs via ${b.via || "Epoch AI"}${latestEval ? `, latest ${fmtDate(latestEval)} (${ageStr(latestEval)})` : ""} · <a href="${srcUrl}" target="_blank" rel="noopener">source ↗</a></span>`;
-  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · DeepSWE live: <a href="https://deepswe.datacurve.ai">Datacurve</a> · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Data self-refreshes every 6 hours.`;
+    <span class="pill${staleFetch ? " stale" : warn ? " warn" : ""}">${escHtml(pill)}</span>
+    <span class="meta"><b>${fmtDate(fetched)}</b> snapshot fetch · OpenRouter prices fetched same run<br>
+      <b>${escHtml(b.name)}:</b> ${b.n} observations via ${escHtml(b.via || "Epoch AI")} · ${dated}/${b.n} dated · ${escHtml(evalText)} · <a href="${escHtml(srcUrl)}" target="_blank" rel="noopener">source ↗</a></span>`;
+  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · DeepSWE live: <a href="https://deepswe.datacurve.ai">Datacurve</a> · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Reported benchmark costs retain the source denominator; token prices don't vary by reasoning effort · <a href="data/quality.json">quality report</a> · Data self-refreshes every 6 hours.`;
 }
 function syncPresets(allPts) {
   const have = k => allPts.filter(p => AXES[k].get(p) != null).length >= 3;
@@ -1240,6 +1308,16 @@ function syncControls() {
   $("#bench").value = state.bench; $("#xaxis").value = state.x; $("#yaxis").value = state.y;
   $("#range").value = state.range; $("#weights").value = state.weights; $("#best").checked = state.best;
   $("#fonly").checked = state.fonly;
+  const forcedAll = costAxisActive();
+  $("#best").disabled = forcedAll;
+  $("#bestlabel").style.opacity = forcedAll ? ".55" : "";
+  $("#bestlabel").title = forcedAll
+    ? "Every configuration is retained whenever a reported-cost axis is active so the real cost frontier is not destroyed."
+    : "Keeps only the highest-scoring configuration of each exact model revision.";
+  for (const id of ["xaxis", "yaxis"]) {
+    const opt = $("#" + id).querySelector('option[value="taskcost"]');
+    if (opt) opt.textContent = bench().cost_label || "Reported benchmark cost";
+  }
 }
 /* Picker categories — viewer-side grouping; unmapped benchmarks land in Other. */
 const BENCH_CAT = {
@@ -1279,9 +1357,9 @@ function renderControls() {
   feat.sort((a, b) => b.n - a.n);
   const opt = b => {
     const evalNote = b.latest_eval ? ` · latest ${b.latest_eval.slice(0,10)}` : "";
-    return `<option value="${b.id}">${b.name} · ${b.n} eval runs${evalNote}</option>`;
+    return `<option value="${escHtml(b.id)}">${escHtml(b.name)} · ${b.n} observations${evalNote}</option>`;
   };
-  const grp = (label, arr) => `<optgroup label="${label}">${arr.map(opt).join("")}</optgroup>`;
+  const grp = (label, arr) => `<optgroup label="${escHtml(label)}">${arr.map(opt).join("")}</optgroup>`;
   bsel.innerHTML = grp("Featured", feat) +
     Object.keys(CAT_LABEL).filter(c => byCat.has(c)).map(c =>
       grp(CAT_LABEL[c], byCat.get(c).sort((a, b) => a.name.localeCompare(b.name)))).join("");
@@ -1298,7 +1376,7 @@ function renderControls() {
   const orgs = [...new Set(Object.values(D.models).map(m => m.org).filter(Boolean))].sort();
   const pop = $("#labspop");
   pop.innerHTML = `<label><input type="checkbox" id="laball" checked> <b>All labs</b></label><hr style="border:none;border-top:1px solid var(--grid)">` +
-    orgs.map(o => `<label><input type="checkbox" class="lab" value="${o}" checked> ${o}</label>`).join("");
+    orgs.map(o => `<label><input type="checkbox" class="lab" value="${escHtml(o)}" checked> ${escHtml(o)}</label>`).join("");
   const sync = () => {
     const boxes = [...pop.querySelectorAll(".lab")];
     const on = boxes.filter(b => b.checked).map(b => b.value);

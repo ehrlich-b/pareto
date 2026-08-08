@@ -1,0 +1,667 @@
+{
+  "benchmarks": {
+    "adversarial_nli": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 15,
+      "score_col": "Score",
+      "source_rows": 19,
+      "uncertainty_rows": 0
+    },
+    "aider_polyglot": {
+      "cost_rows": 57,
+      "dated_rows": 9,
+      "parsed_rows": 72,
+      "score_col": "Percent correct",
+      "source_rows": 77,
+      "uncertainty_rows": 0
+    },
+    "ale_bench": {
+      "cost_rows": 106,
+      "dated_rows": 0,
+      "parsed_rows": 106,
+      "score_col": "Performance",
+      "source_rows": 106,
+      "uncertainty_rows": 0
+    },
+    "algotune": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 18,
+      "score_col": "Score",
+      "source_rows": 18,
+      "uncertainty_rows": 0
+    },
+    "apex_agents": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 55,
+      "score_col": "Pass@1 score",
+      "source_rows": 55,
+      "uncertainty_rows": 55
+    },
+    "arc_agi": {
+      "cost_rows": 159,
+      "dated_rows": 0,
+      "parsed_rows": 188,
+      "score_col": "Score",
+      "source_rows": 191,
+      "uncertainty_rows": 0
+    },
+    "arc_agi_2": {
+      "cost_rows": 151,
+      "dated_rows": 0,
+      "parsed_rows": 172,
+      "score_col": "Score",
+      "source_rows": 172,
+      "uncertainty_rows": 0
+    },
+    "arc_ai2": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 134,
+      "score_col": "Challenge score",
+      "source_rows": 145,
+      "uncertainty_rows": 0
+    },
+    "balrog": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 36,
+      "score_col": "Average progress",
+      "source_rows": 36,
+      "uncertainty_rows": 36
+    },
+    "bbh": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 88,
+      "score_col": "Average",
+      "source_rows": 92,
+      "uncertainty_rows": 0
+    },
+    "blueprint_bench_2": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 21,
+      "score_col": "Score",
+      "source_rows": 21,
+      "uncertainty_rows": 0
+    },
+    "bool_q": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 136,
+      "score_col": "Score",
+      "source_rows": 206,
+      "uncertainty_rows": 0
+    },
+    "btf3": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 9,
+      "score_col": "Pooled score",
+      "source_rows": 9,
+      "uncertainty_rows": 9
+    },
+    "cad_eval": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 15,
+      "score_col": "Overall pass (%)",
+      "source_rows": 15,
+      "uncertainty_rows": 0
+    },
+    "chess_puzzles": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 153,
+      "score_col": "mean_score",
+      "source_rows": 153,
+      "uncertainty_rows": 153
+    },
+    "cl_bench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 23,
+      "score_col": "Overall",
+      "source_rows": 23,
+      "uncertainty_rows": 23
+    },
+    "cl_bench_life": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 17,
+      "score_col": "Overall",
+      "source_rows": 17,
+      "uncertainty_rows": 17
+    },
+    "common_sense_qa_2": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 6,
+      "score_col": "Score",
+      "source_rows": 10,
+      "uncertainty_rows": 0
+    },
+    "critpt": {
+      "cost_rows": 11,
+      "dated_rows": 0,
+      "parsed_rows": 139,
+      "score_col": "Accuracy",
+      "source_rows": 139,
+      "uncertainty_rows": 0
+    },
+    "cursorbench": {
+      "cost_rows": 31,
+      "dated_rows": 0,
+      "parsed_rows": 31,
+      "score_col": "Score",
+      "source_rows": 31,
+      "uncertainty_rows": 0
+    },
+    "cybench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 22,
+      "score_col": "Unguided % Solved",
+      "source_rows": 22,
+      "uncertainty_rows": 0
+    },
+    "deepresearchbench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 36,
+      "score_col": "Average score",
+      "source_rows": 37,
+      "uncertainty_rows": 0
+    },
+    "deepswe": {
+      "cost_rows": 53,
+      "dated_rows": 53,
+      "parsed_rows": 53,
+      "score_col": "Pass@1",
+      "source_rows": 53,
+      "uncertainty_rows": 53,
+      "via": "Datacurve (live)"
+    },
+    "enigma_eval": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 46,
+      "score_col": "Accuracy",
+      "source_rows": 46,
+      "uncertainty_rows": 46
+    },
+    "epoch_capabilities_index": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 521,
+      "score_col": "ECI Score",
+      "source_rows": 815,
+      "uncertainty_rows": 0
+    },
+    "exploitbench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 20,
+      "score_col": "Mean capability",
+      "source_rows": 20,
+      "uncertainty_rows": 0
+    },
+    "fictionlivebench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 42,
+      "score_col": "120k token score",
+      "source_rows": 62,
+      "uncertainty_rows": 0
+    },
+    "forecastbench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 75,
+      "score_col": "Overall score",
+      "source_rows": 75,
+      "uncertainty_rows": 75
+    },
+    "frontiercode": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 20,
+      "score_col": "Main score",
+      "source_rows": 25,
+      "uncertainty_rows": 0
+    },
+    "frontiermath": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 101,
+      "score_col": "mean_score",
+      "source_rows": 101,
+      "uncertainty_rows": 101
+    },
+    "frontiermath_tier_4": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 72,
+      "score_col": "mean_score",
+      "source_rows": 72,
+      "uncertainty_rows": 72
+    },
+    "frontierswe": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 15,
+      "score_col": "Dominance",
+      "source_rows": 15,
+      "uncertainty_rows": 0
+    },
+    "gbaeval": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 23,
+      "score_col": "Overall score",
+      "source_rows": 23,
+      "uncertainty_rows": 0
+    },
+    "gdp_pdf": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 21,
+      "score_col": "GDP.pdf score",
+      "source_rows": 24,
+      "uncertainty_rows": 0
+    },
+    "gdpval": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 11,
+      "score_col": "Win Rate (%)",
+      "source_rows": 11,
+      "uncertainty_rows": 0
+    },
+    "geobench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 32,
+      "score_col": "ACW Avg Score",
+      "source_rows": 32,
+      "uncertainty_rows": 0
+    },
+    "gpqa_diamond": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 255,
+      "score_col": "mean_score",
+      "source_rows": 255,
+      "uncertainty_rows": 255
+    },
+    "gsm8k": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 170,
+      "score_col": "EM",
+      "source_rows": 235,
+      "uncertainty_rows": 0
+    },
+    "gso": {
+      "cost_rows": 0,
+      "dated_rows": 20,
+      "parsed_rows": 38,
+      "score_col": "Score OPT@1",
+      "source_rows": 38,
+      "uncertainty_rows": 0
+    },
+    "hella_swag": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 113,
+      "score_col": "Overall accuracy",
+      "source_rows": 135,
+      "uncertainty_rows": 0
+    },
+    "hle": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 51,
+      "score_col": "Accuracy",
+      "source_rows": 51,
+      "uncertainty_rows": 51
+    },
+    "lambada": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 53,
+      "score_col": "Score",
+      "source_rows": 80,
+      "uncertainty_rows": 0
+    },
+    "lech_mazur_writing": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 49,
+      "score_col": "Mean score",
+      "source_rows": 49,
+      "uncertainty_rows": 0
+    },
+    "live_bench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 54,
+      "score_col": "Global average",
+      "source_rows": 64,
+      "uncertainty_rows": 0
+    },
+    "math_level_5": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 108,
+      "score_col": "mean_score",
+      "source_rows": 108,
+      "uncertainty_rows": 108
+    },
+    "metr_time_horizons": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 50,
+      "score_col": "Time horizon",
+      "source_rows": 50,
+      "uncertainty_rows": 0
+    },
+    "mindcube": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 5,
+      "score_col": "Overall score",
+      "source_rows": 5,
+      "uncertainty_rows": 0
+    },
+    "mmlu": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 217,
+      "score_col": "EM",
+      "source_rows": 249,
+      "uncertainty_rows": 0
+    },
+    "mystery_game_puzzles": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 47,
+      "score_col": "mean_score",
+      "source_rows": 47,
+      "uncertainty_rows": 47
+    },
+    "open_book_qa": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 70,
+      "score_col": "Accuracy",
+      "source_rows": 71,
+      "uncertainty_rows": 0
+    },
+    "os_world": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 20,
+      "score_col": "Score",
+      "source_rows": 58,
+      "uncertainty_rows": 0
+    },
+    "osworld_2": {
+      "cost_rows": 7,
+      "dated_rows": 0,
+      "parsed_rows": 10,
+      "score_col": "Binary accuracy",
+      "source_rows": 10,
+      "uncertainty_rows": 0
+    },
+    "otis_mock_aime_2024_2025": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 230,
+      "score_col": "mean_score",
+      "source_rows": 230,
+      "uncertainty_rows": 230
+    },
+    "piqa": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 113,
+      "score_col": "Score",
+      "source_rows": 140,
+      "uncertainty_rows": 0
+    },
+    "posttrainbench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 35,
+      "score_col": "Average (%)",
+      "source_rows": 35,
+      "uncertainty_rows": 0
+    },
+    "proofbench": {
+      "cost_rows": 51,
+      "dated_rows": 0,
+      "parsed_rows": 52,
+      "score_col": "Accuracy",
+      "source_rows": 52,
+      "uncertainty_rows": 52
+    },
+    "rli": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 12,
+      "score_col": "Score",
+      "source_rows": 12,
+      "uncertainty_rows": 0
+    },
+    "scicode": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 129,
+      "score_col": "Score",
+      "source_rows": 129,
+      "uncertainty_rows": 0
+    },
+    "science_qa": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 26,
+      "score_col": "Score",
+      "source_rows": 104,
+      "uncertainty_rows": 0
+    },
+    "simplebench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 91,
+      "score_col": "Score (AVG@5)",
+      "source_rows": 93,
+      "uncertainty_rows": 0
+    },
+    "simpleqa_verified": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 71,
+      "score_col": "mean_score",
+      "source_rows": 71,
+      "uncertainty_rows": 71
+    },
+    "spatialviz_bench": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 8,
+      "score_col": "Overall score",
+      "source_rows": 8,
+      "uncertainty_rows": 0
+    },
+    "superglue": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 10,
+      "score_col": "Score",
+      "source_rows": 11,
+      "uncertainty_rows": 0
+    },
+    "surface_evolver_bench": {
+      "cost_rows": 24,
+      "dated_rows": 0,
+      "parsed_rows": 24,
+      "score_col": "Mean score",
+      "source_rows": 24,
+      "uncertainty_rows": 0
+    },
+    "swe_bench_verified": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 35,
+      "score_col": "mean_score",
+      "source_rows": 35,
+      "uncertainty_rows": 35
+    },
+    "terminalbench": {
+      "cost_rows": 0,
+      "dated_rows": 202,
+      "parsed_rows": 202,
+      "score_col": "Accuracy mean",
+      "source_rows": 204,
+      "uncertainty_rows": 0
+    },
+    "the_agent_company": {
+      "cost_rows": 15,
+      "dated_rows": 0,
+      "parsed_rows": 16,
+      "score_col": "% Score",
+      "source_rows": 16,
+      "uncertainty_rows": 0
+    },
+    "trivia_qa": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 115,
+      "score_col": "EM",
+      "source_rows": 115,
+      "uncertainty_rows": 0
+    },
+    "vending_bench_2": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 57,
+      "score_col": "Score",
+      "source_rows": 57,
+      "uncertainty_rows": 0
+    },
+    "video_mme": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 50,
+      "score_col": "Overall (no subtitles)",
+      "source_rows": 50,
+      "uncertainty_rows": 0
+    },
+    "vpct": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 38,
+      "score_col": "Correct",
+      "source_rows": 38,
+      "uncertainty_rows": 0
+    },
+    "webdev_arena": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 103,
+      "score_col": "Arena Score",
+      "source_rows": 109,
+      "uncertainty_rows": 101
+    },
+    "weirdml": {
+      "cost_rows": 163,
+      "dated_rows": 0,
+      "parsed_rows": 163,
+      "score_col": "Accuracy",
+      "source_rows": 164,
+      "uncertainty_rows": 0
+    },
+    "wino_grande": {
+      "cost_rows": 0,
+      "dated_rows": 0,
+      "parsed_rows": 137,
+      "score_col": "Accuracy",
+      "source_rows": 145,
+      "uncertainty_rows": 0
+    }
+  },
+  "counts": {
+    "benchmarks": 74,
+    "invalid_dates": 0,
+    "metadata_conflicts": 1,
+    "models": 601,
+    "openrouter_collisions": 0,
+    "quarantined": 0,
+    "scores": 5571
+  },
+  "coverage": {
+    "context": {
+      "percent": 48.6,
+      "rows": 2707,
+      "total": 5571
+    },
+    "cost": {
+      "percent": 14.9,
+      "rows": 828,
+      "total": 5571
+    },
+    "eval_date": {
+      "percent": 5.1,
+      "rows": 284,
+      "total": 5571
+    },
+    "flop": {
+      "percent": 37.3,
+      "rows": 2078,
+      "total": 5571
+    },
+    "open_weights": {
+      "percent": 85.8,
+      "rows": 4781,
+      "total": 5571
+    },
+    "org": {
+      "percent": 95.3,
+      "rows": 5310,
+      "total": 5571
+    },
+    "params": {
+      "percent": 14.8,
+      "rows": 822,
+      "total": 5571
+    },
+    "price_in": {
+      "percent": 48.6,
+      "rows": 2707,
+      "total": 5571
+    },
+    "release_date": {
+      "percent": 99,
+      "rows": 5513,
+      "total": 5571
+    },
+    "uncertainty": {
+      "percent": 28.5,
+      "rows": 1590,
+      "total": 5571
+    }
+  },
+  "gates": {
+    "failures": [],
+    "status": "pass"
+  },
+  "generated_at": "2026-08-08T21:37:37Z",
+  "status": "warn",
+  "warnings": [
+    "model metadata conflict: glm-4-5 release_date=2025-08-03/2025-08-05"
+  ]
+}

@@ -229,6 +229,7 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 #tip .tip-hero { display: flex; gap: 18px; align-items: flex-end; margin: 7px 0 8px; }
 #tip .tip-hero .hv { font: 600 17px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
 #tip .tip-hero .hk { display: block; font: 600 9px/1.7 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+#tip .tip-hero .ci { font: 500 11px var(--mono); color: var(--muted); margin-left: 3px; }
 #tip .tip-prov { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--grid); color: var(--muted); font-size: 10.5px; max-width: 290px; white-space: normal; line-height: 1.45; }
 .newtag { font: 700 8.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
   color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 4px; margin-left: 4px; vertical-align: 2px; }
@@ -260,6 +261,10 @@ footer code { font: 11.5px var(--mono); }
   header h1 { font-size: 24px; }
   .prov { align-items: flex-start; }
   .prov .meta { text-align: left; }
+  /* long option labels must never widen the card into a horizontal scroll */
+  .ctl select { max-width: calc(100vw - 120px); }
+  .row input[type="text"] { max-width: calc(100vw - 120px); }
+  .grp { flex-wrap: wrap; white-space: normal; }
 }
 </style>
 </head>
@@ -1007,7 +1012,8 @@ function showTip(p, x, y, onFrontier, chartH, pinned) {
   if (p.M.aa) add("AA intel (0–100)", p.M.aa.intelligence_index);
   const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : null;
   // the two axis-defining numbers lead; everything else is reference material
-  const hero = `<div class="tip-hero"><span class="hv">${scoreFmt(p.v)}<span class="hk">${humanize(bench().score_col)}</span></span>` +
+  const ci = p.ci && benchIsPct ? `<span class="ci">±${(p.ci * 100).toFixed(1)}</span>` : "";
+  const hero = `<div class="tip-hero"><span class="hv">${scoreFmt(p.v)}${ci}<span class="hk">${humanize(bench().score_col)}${ci ? " · 95% ci" : ""}</span></span>` +
     (p.c != null ? `<span class="hv">${fmtMoney(p.c)}<span class="hk">$ / task</span></span>` : "") + `</div>`;
   const prov = `<div class="tip-prov">${p.ed
     ? `evaluated ${fmtDate(p.ed)} (${ageStr(p.ed)})`
@@ -1215,8 +1221,8 @@ function renderProv() {
   $("#prov").innerHTML = `
     <span class="pill${staleFetch ? " stale" : ""}">${staleFetch ? `Snapshot stale · ${ageStr(fetched) || "?"}` : `Snapshot fresh · ${ageStr(fetched) || "today"}`}</span>
     <span class="meta"><b>${fmtDate(fetched)}</b> snapshot · prices from OpenRouter same day<br>
-      <b>${b.name}:</b> ${b.n} eval runs via Epoch AI${latestEval ? `, latest ${fmtDate(latestEval)} (${ageStr(latestEval)})` : ""} · <a href="${srcUrl}" target="_blank" rel="noopener">source ↗</a></span>`;
-  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Data self-refreshes every 6 hours.`;
+      <b>${b.name}:</b> ${b.n} eval runs via ${b.via || "Epoch AI"}${latestEval ? `, latest ${fmtDate(latestEval)} (${ageStr(latestEval)})` : ""} · <a href="${srcUrl}" target="_blank" rel="noopener">source ↗</a></span>`;
+  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · DeepSWE live: <a href="https://deepswe.datacurve.ai">Datacurve</a> · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Data self-refreshes every 6 hours.`;
 }
 function syncPresets(allPts) {
   const have = k => allPts.filter(p => AXES[k].get(p) != null).length >= 3;

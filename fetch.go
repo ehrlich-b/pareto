@@ -562,6 +562,125 @@ func loadAliases(root string) (map[string]string, error) {
 	return out, json.Unmarshal(raw, &out)
 }
 
+const datacurveURL = "https://deepswe.datacurve.ai/artifacts/v1.1/leaderboard-live.json"
+
+// Epoch ingests DeepSWE with a lag; Datacurve's live artifact adds new models,
+// fresher runs, and confidence intervals. Org guesses only matter for models
+// Epoch hasn't seen yet.
+var dcOrgPrefix = []struct{ pre, org string }{
+	{"claude", "Anthropic"}, {"gpt", "OpenAI"}, {"o1", "OpenAI"}, {"o3", "OpenAI"},
+	{"o4", "OpenAI"}, {"gemini", "Google DeepMind"}, {"gemma", "Google DeepMind"},
+	{"kimi", "Moonshot AI"}, {"qwen", "Alibaba"}, {"deepseek", "DeepSeek"},
+	{"glm", "Z.ai"}, {"grok", "xAI"}, {"muse", "Meta"}, {"llama", "Meta"},
+	{"mistral", "Mistral"},
+}
+
+// fetchDatacurveDeepSWE replaces Epoch's DeepSWE rows with the live v1.1
+// leaderboard. Returns the spliced score list; any error or thin result leaves
+// the Epoch rows untouched.
+func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, modelMeta map[string]map[string]any) ([]map[string]any, int, error) {
+	raw, _, err := fetchURL(datacurveURL)
+	if err != nil {
+		return scores, 0, err
+	}
+	var doc struct {
+		GeneratedAt string `json:"generated_at"`
+		Rows        []struct {
+			Model      string   `json:"model"`
+			Effort     string   `json:"reasoning_effort"`
+			PassAt1    *float64 `json:"pass_at_1"`
+			CIHalf     *float64 `json:"ci_half"`
+			MeanCost   *float64 `json:"mean_cost_usd"`
+			MeanOutTok *float64 `json:"mean_output_tokens"`
+			MeanSteps  *float64 `json:"mean_agent_steps"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return scores, 0, err
+	}
+	date := ""
+	if len(doc.GeneratedAt) >= 10 {
+		date = doc.GeneratedAt[:10]
+	}
+	var recs []map[string]any
+	newMeta := map[string]map[string]any{}
+	for _, r := range doc.Rows {
+		if r.PassAt1 == nil || r.Model == "" {
+			continue
+		}
+		slug := normSlug(r.Model)
+		rec := map[string]any{"m": slug, "b": "deepswe", "v": roundN(*r.PassAt1, 4)}
+		if e := strings.ToLower(r.Effort); e != "" && e != "unknown" {
+			rec["e"] = e
+		}
+		if r.CIHalf != nil && *r.CIHalf > 0 {
+			rec["ci"] = roundN(*r.CIHalf, 4)
+		}
+		if r.MeanCost != nil && *r.MeanCost > 0 {
+			rec["c"] = roundN(*r.MeanCost, 4)
+		}
+		if r.MeanOutTok != nil && *r.MeanOutTok != 0 {
+			rec["ot"] = int64(math.RoundToEven(*r.MeanOutTok))
+		}
+		if r.MeanSteps != nil && *r.MeanSteps != 0 {
+			rec["st"] = roundN(*r.MeanSteps, 1)
+		}
+		if date != "" {
+			rec["d"] = date
+		}
+		recs = append(recs, rec)
+		if modelMeta[slug] == nil && newMeta[slug] == nil {
+			meta := map[string]any{"display": prettify(slug)}
+			for _, p := range dcOrgPrefix {
+				if strings.HasPrefix(slug, p.pre) {
+					meta["org"] = p.org
+					break
+				}
+			}
+			newMeta[slug] = meta
+		}
+	}
+	// a thin artifact means something changed upstream — keep the Epoch rows
+	if len(recs) < 20 {
+		return scores, 0, fmt.Errorf("only %d usable rows in %s", len(recs), datacurveURL)
+	}
+	var out []map[string]any
+	for _, s := range scores {
+		if s["b"] != "deepswe" {
+			out = append(out, s)
+		}
+	}
+	out = append(out, recs...)
+	for slug, meta := range newMeta {
+		modelMeta[slug] = meta
+	}
+	hasCost := false
+	for _, r := range recs {
+		if _, ok := r["c"]; ok {
+			hasCost = true
+			break
+		}
+	}
+	b, _ := benchmarks["deepswe"].(map[string]any)
+	if b == nil {
+		b = map[string]any{"id": "deepswe"}
+		benchmarks["deepswe"] = b
+	}
+	b["name"] = "DeepSWE"
+	b["score_col"] = "Pass@1"
+	b["n"] = len(recs)
+	b["has_cost"] = hasCost
+	b["featured"] = featured["deepswe"]
+	b["source_url"] = "https://deepswe.datacurve.ai/"
+	b["via"] = "Datacurve (live)"
+	if date != "" {
+		b["latest_eval"] = date
+	} else {
+		b["latest_eval"] = nil
+	}
+	return out, len(recs), nil
+}
+
 // loadPricePrev picks a price baseline from price_history.jsonl for movement
 // indicators: the newest snapshot at least 6 days old, else the oldest we have.
 func loadPricePrev(dataDir string, now time.Time) map[string]any {
@@ -639,6 +758,14 @@ func fetchAndWrite(root string) (string, error) {
 	aliases, err := loadAliases(root)
 	if err != nil {
 		return "", fmt.Errorf("aliases.json: %w", err)
+	}
+
+	dcNote := ""
+	if spliced, n, dcErr := fetchDatacurveDeepSWE(scores, benchmarks, modelMeta); dcErr != nil {
+		dcNote = fmt.Sprintf(" · deepswe: Datacurve fetch failed (%v), kept Epoch rows", dcErr)
+	} else {
+		scores = spliced
+		dcNote = fmt.Sprintf(" · deepswe: %d live rows from Datacurve", n)
 	}
 
 	// ---- join: epoch model slug -> openrouter pricing, epoch params ----
@@ -767,8 +894,8 @@ func fetchAndWrite(root string) (string, error) {
 
 	// ---- report ----
 	var rep strings.Builder
-	fmt.Fprintf(&rep, "wrote %s (%d KB) · benchmarks: %d · scores: %d · models: %d · priced via OpenRouter: %d/%d",
-		outPath, (len(blob)+17)/1024, len(benchmarks), len(scores), len(models), matched, len(models))
+	fmt.Fprintf(&rep, "wrote %s (%d KB) · benchmarks: %d · scores: %d · models: %d · priced via OpenRouter: %d/%d%s",
+		outPath, (len(blob)+17)/1024, len(benchmarks), len(scores), len(models), matched, len(models), dcNote)
 	type kv struct {
 		slug string
 		n    int

@@ -13,9 +13,10 @@ scp aliases.json $SERVER:$REMOTE_DIR/
 scp /tmp/pareto-bin $SERVER:/opt/pareto-bin.new
 ssh $SERVER "mv /opt/pareto-bin.new /opt/pareto-bin && chmod +x /opt/pareto-bin"
 
-# seed the data snapshot only if the server has none — the app refreshes its own
-ssh $SERVER "test -f $REMOTE_DIR/data/data.js" || scp data/data.js $SERVER:$REMOTE_DIR/data/
-ssh $SERVER "test -f $REMOTE_DIR/data/quality.json" || scp data/quality.json $SERVER:$REMOTE_DIR/data/
+# Ship a schema-matched snapshot with every release.  Publish data.js last so
+# readers never observe a new payload before its quality report is available.
+scp data/quality.json $SERVER:$REMOTE_DIR/data/
+scp data/data.js $SERVER:$REMOTE_DIR/data/
 
 # Plumbing (systemd unit, nginx vhost) is owned by ~/repos/infra — this
 # script only ships content and the binary.

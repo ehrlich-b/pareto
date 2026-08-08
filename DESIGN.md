@@ -72,36 +72,38 @@ falls back to snapshot date in the tooltip. Epoch also lags source leaderboards
 (DeepSWE: Epoch has v1, 50 runs/18 models; datacurve is on v1.1, 113 tasks/21
 models, with ±CIs and effort badges).
 
-Phase 1 — copy & trust (zero risk):
-- Stale copy: freshness pill says "run fetch.py", footer says "Refresh data with
-  python3 fetch.py" — both false now (self-refreshing Go app, fetch.py deleted).
-- Tooltip "Scored: not published (Epoch snapshot …)" reads as an error — reframe
-  as provenance, and give the tooltip hierarchy (headline score+cost, then meta).
-- r² stat in readout is unexplained — title tooltip or drop.
+All four phases SHIPPED 2026-08-08 (repo is git now; one commit per phase):
+1. Copy & trust — tooltip hero (score ± CI, $/task) + meta table + provenance
+   footer; pill/footer no longer mention fetch.py; r² and evals-thru stats have
+   title explainers.
+2. Freshness — Go emits `price_prev` (newest history line ≥6d old, else oldest)
+   from price_history.jsonl; tooltip shows ↑↓ vs baseline when ≥5% move; NEW
+   badge (release <30d) in tooltip + table; "evals thru" readout stat.
+3. Density & discovery — picker grouped into 7 hand-mapped categories
+   (BENCH_CAT in index.html — new benchmarks fall into "Other", extend the map);
+   "frontier only" checkbox (hash param `fonly`, additive); table score bars +
+   NEW badges. Label collision handling already existed — untouched.
+4. Data depth — DeepSWE ingested live from
+   deepswe.datacurve.ai/artifacts/v1.1/leaderboard-live.json (endpoint found
+   via network tab, not documented): replaces Epoch's laggier rows when ≥20
+   parse, else keeps Epoch; adds `ci` (95% half-width) to score recs, synthesizes
+   meta for models Epoch lacks (org by slug prefix), sets bench `via` shown in
+   provenance. 390px fixed: selects clamp, .grp wraps (tested via iframe —
+   window resize can't go below ~1560).
 
-Phase 2 — use the freshness data we already collect:
-- price_history.jsonl accrues every 6h and is never read: price movement ↑↓
-  vs ~7d ago in tooltip/table (llm-stats does this well).
-- NEW badge for models released <30d; per-benchmark "updated X ago" where
-  latest_eval exists.
+Not built (didn't clear the "wanted" bar): side-by-side compare view;
+superlative top-4 cards; picker filter input.
 
-Phase 3 — density & discovery:
-- Benchmark picker: 74 flat options → Epoch-style category groups + a filter
-  input. (Epoch's own hub groups by Math/Agent/SWE/Games/etc.)
-- "Frontier only" toggle to hide dominated points on dense benches (MMLU plots
-  131; the gray mass overlaps hit targets). Smarter label collision handling.
-- Table: score bars, movement column.
+Steal-list sources for later: artificialanalysis.ai (superlative cards,
+estimated-* flags), llm-stats.com (compare flow), epoch.ai/benchmarks,
+deepswe.datacurve.ai (version toggle).
 
-Phase 4 — data depth:
-- Direct datacurve DeepSWE ingestion (v1.1 + confidence intervals) as a
-  second-source override; CIs anywhere a source publishes them.
-- Real mobile pass (untested — window resize wouldn't shrink below ~1560 in
-  review). Side-by-side compare view (llm-stats /compare pattern) if wanted.
-
-Steal-list sources: artificialanalysis.ai (superlative top-4 cards, estimated-*
-flags), llm-stats.com (movement arrows, NEW badges, freshness statement,
-compare flow), epoch.ai/benchmarks (category grouping, frontier-only toggle),
-deepswe.datacurve.ai (±CIs, version toggle, effort badges).
+Verification ritual per deploy (site is shared): 13,320-combo sweep (all
+benchmarks × axis pairs × fonly on/off) with a window error trap, plus eyeball
+of tooltip/readout/table in the browser. Preview against the Go server
+(`go build && ./pareto -root . -every 0`), NOT python http.server — python
+sends no cache headers and Chrome's heuristic cache serves stale data.js
+(hard-reload to recover).
 
 ## History
 

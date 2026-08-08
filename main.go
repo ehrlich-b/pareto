@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -44,8 +45,27 @@ func main() {
 
 	fs := http.FileServer(http.Dir(*root))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// the app rewrites the page and snapshot in place — clients must revalidate
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" || strings.HasPrefix(r.URL.Path, "/data/") {
+		// Serve the page with a mtime-versioned data URL: Cloudflare rewrites our
+		// no-cache to a 4h browser TTL on .js, so a fixed data/data.js URL goes
+		// stale in browsers between refreshes — a new URL per snapshot cannot.
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			page, err := os.ReadFile(filepath.Join(*root, "index.html"))
+			if err != nil {
+				http.Error(w, "index.html unreadable", http.StatusInternalServerError)
+				return
+			}
+			var v int64
+			if fi, err := os.Stat(filepath.Join(*root, "data", "data.js")); err == nil {
+				v = fi.ModTime().Unix()
+			}
+			page = bytes.Replace(page, []byte(`src="data/data.js"`),
+				[]byte(fmt.Sprintf(`src="data/data.js?v=%d"`, v)), 1)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Write(page)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/data/") {
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		fs.ServeHTTP(w, r)

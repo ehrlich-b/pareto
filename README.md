@@ -128,3 +128,12 @@ mappings, OpenRouter route selection, API filters/pagination, and quality-gate
 failure behavior. The browser audit renders every benchmark/axis pair plus all
 range, weight, best-configuration, frontier-only, scatter, and table states. The
 same non-browser checks run in GitHub Actions.
+
+## Contributing and license
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the complete benchmark-onboarding
+workflow, schema requirements, data-quality gates, and verification checklist.
+The application code and project documentation are available under the
+[`MIT License`](LICENSE). Bundled and fetched third-party benchmark data remains
+subject to its source license and attribution terms described above and in the
+snapshot provenance.

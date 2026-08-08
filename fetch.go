@@ -562,6 +562,46 @@ func loadAliases(root string) (map[string]string, error) {
 	return out, json.Unmarshal(raw, &out)
 }
 
+// loadPricePrev picks a price baseline from price_history.jsonl for movement
+// indicators: the newest snapshot at least 6 days old, else the oldest we have.
+func loadPricePrev(dataDir string, now time.Time) map[string]any {
+	raw, err := os.ReadFile(filepath.Join(dataDir, "price_history.jsonl"))
+	if err != nil {
+		return nil
+	}
+	type snap struct {
+		Date   string               `json:"date"`
+		Prices map[string][]float64 `json:"prices"`
+	}
+	var best, oldest *snap
+	cut := now.Add(-6 * 24 * time.Hour).Format("2006-01-02T15:04:05Z")
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var s snap
+		if json.Unmarshal(line, &s) != nil || s.Date == "" || len(s.Prices) == 0 {
+			continue
+		}
+		if oldest == nil {
+			cp := s
+			oldest = &cp
+		}
+		if s.Date <= cut { // lines are chronological; the last one under the cutoff wins
+			cp := s
+			best = &cp
+		}
+	}
+	pick := best
+	if pick == nil {
+		pick = oldest
+	}
+	if pick == nil {
+		return nil
+	}
+	return map[string]any{"date": pick.Date, "prices": pick.Prices}
+}
+
 // fetchAndWrite runs the full pipeline and writes data/data.js + price_history.jsonl.
 // Returns a human-readable report.
 func fetchAndWrite(root string) (string, error) {
@@ -674,6 +714,7 @@ func fetchAndWrite(root string) (string, error) {
 	if etag := benchHdr.Get("Etag"); etag != "" {
 		etagAny = etag
 	}
+	pricePrev := loadPricePrev(dataDir, time.Now().UTC())
 	payload := map[string]any{
 		"provenance": map[string]any{
 			"fetched_at":  now,
@@ -689,6 +730,9 @@ func fetchAndWrite(root string) (string, error) {
 		"benchmarks": benchmarks,
 		"models":     models,
 		"scores":     scores,
+	}
+	if pricePrev != nil {
+		payload["price_prev"] = pricePrev
 	}
 
 	blob, err := json.Marshal(payload)

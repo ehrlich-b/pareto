@@ -226,6 +226,12 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 #tip td { padding: 1px 0; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #tip td:first-child { color: var(--muted); padding-right: 12px; }
 #tip .age { color: var(--muted); }
+#tip .tip-hero { display: flex; gap: 18px; align-items: flex-end; margin: 7px 0 8px; }
+#tip .tip-hero .hv { font: 600 17px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+#tip .tip-hero .hk { display: block; font: 600 9px/1.7 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+#tip .tip-prov { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--grid); color: var(--muted); font-size: 10.5px; max-width: 290px; white-space: normal; line-height: 1.45; }
+.newtag { font: 700 8.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 4px; margin-left: 4px; vertical-align: 2px; }
 .viewtabs { margin-left: auto; display: flex; gap: 4px; }
 .viewtabs button.on { border-color: var(--accent); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
 .subnote { font: 11.5px/1.5 var(--mono); color: var(--muted); margin-top: 10px; min-height: 2.4em; }
@@ -665,12 +671,16 @@ function fitFrontier(front, ax, ay) {
 function renderFrontierReadout(front, ax, ay, isRecord, extra) {
   const el = $("#readout");
   const axName = (a, glyph) => a.get === AXES.score.get ? humanize(bench().score_col) + " · better " + glyph : axisTitle(a, glyph);
-  const st = (k, v) => `<span class="stat"><span class="k">${k}</span><span class="v">${v}</span></span>`;
+  const st = (k, v, why) => `<span class="stat"${why ? ` title="${why}"` : ""}><span class="k">${k}</span><span class="v">${v}</span></span>`;
   const stats = [];
   if (extra && extra.plotted > 0) {
     stats.push(st(isRecord ? "record holders" : "on frontier", front.length));
     stats.push(st("beaten", extra.plotted - front.length));
-    if (extra.r2 != null) stats.push(st("frontier fit r²", extra.r2.toFixed(2)));
+    if (extra.r2 != null) stats.push(st("frontier fit r²", extra.r2.toFixed(2),
+      "How well the frontier models fit one straight line in log/logit space — 1.00 means the tradeoff follows a clean law"));
+    const le = parseDate(bench().latest_eval);
+    if (le) stats.push(st("evals thru", fmtDate(le),
+      "Latest published evaluation date on this benchmark — most Epoch benchmarks publish no per-run dates"));
   }
   const head = `<div class="rhead"><span class="rtitle">${bench().name}</span>` +
     `<span class="raxes">${axName(ay, "↑")} × ${axName(ax, "→")}</span>` +
@@ -974,21 +984,35 @@ function showTip(p, x, y, onFrontier, chartH, pinned) {
   const snapDate = fmtDate(parseDate(D.provenance.fetched_at));
   const rows = [];
   const add = (k, v, extra) => { if (v != null && v !== "—") rows.push(`<tr><td>${k}</td><td>${v}${extra ? ` <span class="age">${extra}</span>` : ""}</td></tr>`); };
-  add(humanize(bench().score_col), scoreFmt(p.v));
-  add("Scored", p.ed ? fmtDate(p.ed) : `not published (Epoch snapshot ${snapDate})`, p.ed ? ageStr(p.ed) : null);
-  add("$ / task", p.c != null ? fmtMoney(p.c) : null);
   if (p.ot) add("Task usage", `${fmtSI(p.ot)} out-tokens${p.st ? " · " + p.st + " steps" : ""}`);
-  if (p.M.price_in != null)
-    add("$ / M in · out", `${fmtMoney(p.M.price_in)} · ${fmtMoney(p.M.price_out)}`, "as of " + snapDate);
+  if (p.M.price_in != null) {
+    // price movement vs the ~week-old snapshot the server keeps in price_prev
+    let mv = null;
+    const prev = D.price_prev && D.price_prev.prices ? D.price_prev.prices[p.m] : null;
+    if (prev && prev.length === 2 && prev[0] > 0 && prev[1] > 0) {
+      const din = (p.M.price_in - prev[0]) / prev[0], dout = (p.M.price_out - prev[1]) / prev[1];
+      if (Math.abs(din) >= 0.05 || Math.abs(dout) >= 0.05)
+        mv = `${din + dout > 0 ? "↑" : "↓"} was ${fmtMoney(prev[0])} · ${fmtMoney(prev[1])} (${fmtDate(parseDate(D.price_prev.date))})`;
+    }
+    add("$ / M in · out", `${fmtMoney(p.M.price_in)} · ${fmtMoney(p.M.price_out)}`, mv);
+  }
   add("Params (total)", p.M.params ? fmtSI(p.M.params) : null);
   add("Train FLOP", p.M.flop ? fmtFlop(p.M.flop) : null);
   add("Context", p.M.context ? fmtCtx(p.M.context) : null);
   add("Released", p.M.release_date, p.rd ? ageStr(p.rd) : null);
   if (p.M.aa) add("AA intel (0–100)", p.M.aa.intelligence_index);
   const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : null;
-  tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${displayName(p)}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
+  // the two axis-defining numbers lead; everything else is reference material
+  const hero = `<div class="tip-hero"><span class="hv">${scoreFmt(p.v)}<span class="hk">${humanize(bench().score_col)}</span></span>` +
+    (p.c != null ? `<span class="hv">${fmtMoney(p.c)}<span class="hk">$ / task</span></span>` : "") + `</div>`;
+  const prov = `<div class="tip-prov">${p.ed
+    ? `evaluated ${fmtDate(p.ed)} (${ageStr(p.ed)})`
+    : `eval date not published by source — score via Epoch snapshot ${snapDate}`}` +
+    (p.M.price_in != null ? ` · prices as of ${snapDate}` : "") + `</div>`;
+  const isNew = p.rd && (NOW - p.rd) < 30 * 864e5;
+  tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${displayName(p)}${isNew ? ' <span class="newtag">new</span>' : ""}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
     <div style="color:var(--muted);margin-bottom:4px">${p.M.org || "?"}${ow ? " · " + ow : ""}${p.e && state.best ? " · " + p.e + " effort" : ""}</div>
-    <table>${rows.join("")}</table>`;
+    ${hero}<table>${rows.join("")}</table>${prov}`;
   tip.classList.toggle("pinned", !!pinned);
   tip.style.display = "block";
   const closer = tip.querySelector("#tipclose");
@@ -1179,10 +1203,10 @@ function renderProv() {
   const latestEval = parseDate(b.latest_eval);
   const srcUrl = b.source_url || "https://epoch.ai/benchmarks";
   $("#prov").innerHTML = `
-    <span class="pill${staleFetch ? " stale" : ""}">${staleFetch ? `Snapshot ${ageStr(fetched) || "?"} — run fetch.py` : `Snapshot fresh · ${ageStr(fetched) || "today"}`}</span>
+    <span class="pill${staleFetch ? " stale" : ""}">${staleFetch ? `Snapshot stale · ${ageStr(fetched) || "?"}` : `Snapshot fresh · ${ageStr(fetched) || "today"}`}</span>
     <span class="meta"><b>${fmtDate(fetched)}</b> snapshot · prices from OpenRouter same day<br>
       <b>${b.name}:</b> ${b.n} eval runs via Epoch AI${latestEval ? `, latest ${fmtDate(latestEval)} (${ageStr(latestEval)})` : ""} · <a href="${srcUrl}" target="_blank" rel="noopener">source ↗</a></span>`;
-  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Refresh data with <code>python3 fetch.py</code>.`;
+  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Blended $/M weighs input:output 3:1, the typical usage ratio; token prices don't vary by reasoning effort — $/task reflects actual measured usage · Data self-refreshes every 6 hours.`;
 }
 function syncPresets(allPts) {
   const have = k => allPts.filter(p => AXES[k].get(p) != null).length >= 3;

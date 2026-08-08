@@ -1,0 +1,47 @@
+# AI Pareto Explorer: data and methodology
+
+AI Pareto Explorer presents model selection as a multi-objective evidence problem rather than a single leaderboard. The interactive page and public API use the same validated snapshot.
+
+## Start here
+
+Fetch `GET https://pareto.ehrlich.dev/api/v1` for the current counts and links. Fetch `/api/v1/snapshot` when you need the complete dataset or the embedded schema glossary. For focused queries use:
+
+    /api/v1/benchmarks?id=deepswe
+    /api/v1/models?q=claude&open=false&limit=100
+    /api/v1/observations?benchmark=terminalbench&limit=1000
+    /api/v1/observations?model=gpt-5-2025-08-07&limit=1000
+
+All API responses are JSON and send `Access-Control-Allow-Origin: *`. Collection responses contain `total`, `offset`, and `limit` where pagination applies. The default page size is 100 and maximum is 1000.
+
+## Snapshot envelope
+
+- `schema_version`: Backward-incompatible snapshot schema version.
+- `schema`: Definitions for compact observation fields and resource-metric units.
+- `provenance`: Fetch timestamp, source URLs, latest evaluation date, upstream revision marker, and license note.
+- `benchmarks`: Map keyed by benchmark id. Includes score semantics, observation counts, coverage, cost denominator, versions, and source state.
+- `models`: Map keyed by exact normalized model revision. Includes organization, release date, weights accessibility, parameters, training compute, price, context, modalities, and Artificial Analysis indices where available.
+- `scores`: Array of source observations. It is deliberately not deduplicated to one row per model.
+- `quality`: Validation status, coverage, diagnostics, and hard-gate results.
+- `price_prev`: A prior price snapshot selected for week-over-week comparisons when available.
+
+## Observation fields
+
+The snapshot's `schema.observation` object is authoritative. Important fields are `oid` stable observation id; `m` exact model id; `b` benchmark id; `v` score; `sm` source model id; `cfg` source-published configuration; `c` reported benchmark cost; `d` evaluation date; `evaluated_at` full timestamp where published; `rd` release date; `ci`, `lo`, `hi`, `se`, or `sd` source uncertainty; `src` source page; `trace` run log or trace; `bv` benchmark version; `metrics` resource/diagnostic measurements; and `notes` source notes.
+
+Resource metrics use readable keys and explicit units: token counts are normalized to tokens, latency to seconds, wall clock to hours, spend to USD, and other counts retain their named unit. They should only be compared when the benchmark and methodology match.
+
+## Frontier semantics
+
+For two axes, observation A dominates B when A is at least as good on both axes and strictly better on one. Higher benchmark score, context, and capability indices are better. Lower price, cost, parameter count, compute, and dates are treated as efficient. Date-versus-score views therefore produce historical record holders. Missing values are excluded from that axis pair and coverage is reported.
+
+The browser's smooth line is a visual fit through empirical undominated points; the undominated points themselves are the data. Confidence intervals are displayed but current frontier membership uses point estimates. Filters, model-configuration summarization, and axis selection change the comparison cohort and therefore can change membership.
+
+## Integrity and freshness
+
+Every refresh must pass minimum counts, stable-id uniqueness, schema, date, and source-specific gates before publication. Unknown benchmark schemas are quarantined instead of guessed. `data.json` and the quality report are committed before the JavaScript snapshot publication marker. A failed refresh retains the last good snapshot.
+
+Snapshot fetch time, evaluation time, and model release time are separate. An absent evaluation date means unknown, not current. Current token pricing is not the historic price paid for an older benchmark run.
+
+## Sources and attribution
+
+Benchmark scores and model metadata primarily come from the Epoch AI Benchmarking Hub and Epoch AI models dataset (CC-BY 4.0). DeepSWE may use Datacurve's live validated artifact with Epoch as fallback. Current token prices, context, model route metadata, and Artificial Analysis indices come through OpenRouter. Consult the snapshot's provenance and each observation's source fields before republishing analysis.

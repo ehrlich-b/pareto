@@ -1,6 +1,6 @@
 // Data pipeline: port of fetch.py. Pulls Epoch AI benchmark + models data and
-// OpenRouter prices, joins by normalized slug, writes data/data.js and appends
-// data/price_history.jsonl. Stdlib only; every datum stamped with provenance.
+// OpenRouter prices, joins by normalized slug, writes data/data.{json,js} and
+// appends data/price_history.jsonl. Stdlib only; every datum stamped with provenance.
 package main
 
 import (
@@ -34,7 +34,7 @@ var efforts = map[string]bool{
 	"default": true, "thinking": true, "nonthinking": true,
 }
 
-var evalDateCols = []string{"Date of evaluation", "Evaluation date", "Run date"}
+var evalDateCols = []string{"Date of evaluation", "Evaluation date", "Run date", "Started at"}
 
 // Epoch's benchmark bundle has no machine-readable schema. Keep the score
 // contract explicit so a new metadata column cannot silently become a score.
@@ -149,6 +149,7 @@ type uncertaintySpec struct {
 var benchmarkUncertainty = map[string]uncertaintySpec{
 	"apex_agents":              {Kind: "se", A: "Pass@1 Standard Error"},
 	"balrog":                   {Kind: "se", A: "Average Standard error"},
+	"blueprint_bench_2":        {Kind: "se", A: "Raw score standard error"},
 	"btf3":                     {Kind: "ci", A: "Pooled 95% CI low", B: "Pooled 95% CI high"},
 	"chess_puzzles":            {Kind: "se", A: "stderr"},
 	"cl_bench":                 {Kind: "sd", A: "Overall std dev"},
@@ -161,12 +162,15 @@ var benchmarkUncertainty = map[string]uncertaintySpec{
 	"gpqa_diamond":             {Kind: "se", A: "stderr"},
 	"hle":                      {Kind: "se", A: "Accuracy Standard Error"},
 	"math_level_5":             {Kind: "se", A: "stderr"},
+	"metr_time_horizons":       {Kind: "ci", A: "CI_low", B: "CI_high"},
 	"mystery_game_puzzles":     {Kind: "se", A: "stderr"},
 	"otis_mock_aime_2024_2025": {Kind: "se", A: "stderr"},
 	"proofbench":               {Kind: "se", A: "Accuracy Standard Error"},
 	"simpleqa_verified":        {Kind: "se", A: "stderr"},
 	"swe_bench_verified":       {Kind: "se", A: "stderr"},
+	"terminalbench":            {Kind: "se", A: "Accuracy SE"},
 	"webdev_arena":             {Kind: "ci", A: "95% CI Low", B: "95% CI High", C: "Score 95% CI"},
+	"weirdml":                  {Kind: "se", A: "Accuracy SE"},
 }
 
 var configColumns = []struct{ Column, Key string }{
@@ -174,6 +178,36 @@ var configColumns = []struct{ Column, Key string }{
 	{"Agent", "agent"}, {"Reasoning effort", "effort"}, {"Reasoning level", "effort"},
 	{"Reasoning", "reasoning"}, {"Tool setting", "tools"}, {"Step budget", "budget"},
 	{"Shots", "shots"}, {"Provider", "provider"}, {"Edit format", "format"},
+}
+
+// Resource and diagnostic fields with stable semantics are retained in a
+// readable per-observation map. This is intentionally an allowlist: the Epoch
+// bundle is schemaless, so silently treating every numeric column as comparable
+// would make downstream analysis brittle.
+var observationMetrics = []struct {
+	Column string
+	Key    string
+	Scale  float64
+}{
+	{"Tokens per task", "total_tokens", 1},
+	{"Total tokens", "total_tokens", 1},
+	{"Total tokens (K)", "total_tokens", 1000},
+	{"Tokens used", "total_tokens", 1},
+	{"Input tokens (K)", "input_tokens", 1000},
+	{"Output tokens (K)", "output_tokens", 1000},
+	{"Mean output tokens", "output_tokens", 1},
+	{"Steps per task", "steps", 1},
+	{"Mean agent steps", "steps", 1},
+	{"Average steps", "steps", 1},
+	{"Time per case (seconds)", "latency_seconds", 1},
+	{"Latency (seconds)", "latency_seconds", 1},
+	{"Wall-clock hours", "wall_clock_hours", 1},
+	{"Votes", "votes", 1},
+	{"Runs", "runs", 1},
+	{"Pass@4", "pass_at_4", 1},
+	{"Calibration Error", "calibration_error", 1},
+	{"Spend", "spend_usd", 1},
+	{"Checkpoints", "checkpoints", 1},
 }
 
 // Pretty names for benchmarks whose auto-title-cased filename reads badly.
@@ -544,7 +578,7 @@ func addUncertainty(rec map[string]any, row []string, idx map[string]int, spec u
 }
 
 func rowSourceURL(row []string, idx map[string]int) string {
-	for _, c := range []string{"Source link", "Source Link", "Source URL"} {
+	for _, c := range []string{"Source link", "Source Link", "Source URL", "Source link (site from table)"} {
 		if v := strings.TrimSpace(cell(row, idx, c)); strings.HasPrefix(v, "http") {
 			return v
 		}
@@ -555,13 +589,40 @@ func rowSourceURL(row []string, idx map[string]int) string {
 	return ""
 }
 
+func rowTraceURL(row []string, idx map[string]int) string {
+	for _, c := range []string{"Log viewer", "Logs", "Trajectories", "Trajectory", "Replay URL"} {
+		if v := strings.TrimSpace(cell(row, idx, c)); strings.HasPrefix(v, "http") {
+			return v
+		}
+	}
+	return ""
+}
+
 func rowBenchmarkVersion(row []string, idx map[string]int) string {
-	for _, c := range []string{"Benchmark version", "LiveBench Version", "Version", "Dataset version"} {
+	for _, c := range []string{"Benchmark version", "LiveBench Version", "METR version", "Version", "Dataset version"} {
 		if v := strings.TrimSpace(cell(row, idx, c)); v != "" {
 			return v
 		}
 	}
 	return ""
+}
+
+func rowMetrics(row []string, idx map[string]int) map[string]any {
+	out := map[string]any{}
+	for _, spec := range observationMetrics {
+		if _, exists := out[spec.Key]; exists {
+			continue
+		}
+		if v, ok := parseFloat(cell(row, idx, spec.Column)); ok && v >= 0 {
+			v *= spec.Scale
+			if math.Trunc(v) == v && v <= math.MaxInt64 {
+				out[spec.Key] = int64(v)
+			} else {
+				out[spec.Key] = roundN(v, 4)
+			}
+		}
+	}
+	return out
 }
 
 // parseEpochBenchmarks returns lossless observations and revision-safe model
@@ -635,6 +696,7 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 		}
 
 		n, datedN, costN, uncertaintyN := 0, 0, 0, 0
+		traceN, metricsN := 0, 0
 		latestEval := ""
 		srcURL := ""
 		versions := map[string]bool{}
@@ -701,16 +763,17 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 			if spec, ok := benchmarkUncertainty[fid]; ok && addUncertainty(rec, row, idx, spec) {
 				uncertaintyN++
 			}
-			if tok, ok := parseFloat(cell(row, idx, "Mean output tokens")); ok && tok != 0 {
-				rec["ot"] = int64(math.RoundToEven(tok))
-			}
-			if steps, ok := parseFloat(cell(row, idx, "Mean agent steps")); ok && steps != 0 {
-				rec["st"] = roundN(steps, 1)
+			if metrics := rowMetrics(row, idx); len(metrics) > 0 {
+				rec["metrics"] = metrics
+				metricsN++
 			}
 			if evalCol != "" {
 				if ed := strings.TrimSpace(cell(row, idx, evalCol)); ed != "" {
 					if date, ok := parseDateValue(ed); ok {
 						rec["d"] = date
+						if strings.Contains(ed, "T") {
+							rec["evaluated_at"] = ed
+						}
 						datedN++
 						if date > latestEval {
 							latestEval = date
@@ -723,6 +786,13 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 			}
 			if rowSrc != "" {
 				rec["src"] = rowSrc
+			}
+			if trace := rowTraceURL(row, idx); trace != "" {
+				rec["trace"] = trace
+				traceN++
+			}
+			if notes := strings.TrimSpace(cell(row, idx, "Notes")); notes != "" {
+				rec["notes"] = notes
 			}
 			if bv := rowBenchmarkVersion(row, idx); bv != "" {
 				rec["bv"] = bv
@@ -748,8 +818,14 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 			if org := strings.TrimSpace(cell(row, idx, "Organization")); org != "" {
 				setMeta(meta, "org", normOrg(org), slug, &diag)
 			}
+			if country := strings.TrimSpace(cell(row, idx, "Country")); country != "" && meta["country"] == nil {
+				meta["country"] = country
+			}
 			if flop, ok := parseFloat(cell(row, idx, "Training compute (FLOP)")); ok && flop != 0 {
 				setMeta(meta, "flop", flop, slug, &diag)
+			}
+			if notes := strings.TrimSpace(cell(row, idx, "Training compute notes")); notes != "" && meta["flop_notes"] == nil {
+				meta["flop_notes"] = notes
 			}
 			if acc := cell(row, idx, "Model accessibility"); acc != "" {
 				setMeta(meta, "open_weights", strings.Contains(strings.ToLower(acc), "open"), slug, &diag)
@@ -766,6 +842,7 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 			b := map[string]any{
 				"id": fid, "name": benchDisplay(fid), "score_col": scoreCol, "n": n,
 				"has_cost": costN > 0, "dated_n": datedN, "uncertainty_n": uncertaintyN,
+				"trace_n": traceN, "metrics_n": metricsN,
 				"featured": featured[fid], "source_status": "ok",
 			}
 			if costN > 0 {
@@ -792,7 +869,8 @@ func parseEpochBenchmarks(zipBytes []byte) (map[string]any, []map[string]any, ma
 			benchmarks[fid] = b
 			diag.Benchmarks[fid] = map[string]any{
 				"source_rows": len(rows), "parsed_rows": n, "dated_rows": datedN,
-				"cost_rows": costN, "uncertainty_rows": uncertaintyN, "score_col": scoreCol,
+				"cost_rows": costN, "uncertainty_rows": uncertaintyN, "trace_rows": traceN,
+				"metrics_rows": metricsN, "score_col": scoreCol,
 			}
 		}
 	}
@@ -932,6 +1010,25 @@ func parseOpenRouter(raw []byte) (map[string]map[string]any, openRouterDiagnosti
 			"context":   m["context_length"],
 			"created":   m["created"],
 		}
+		if arch, ok := m["architecture"].(map[string]any); ok {
+			if v := arch["input_modalities"]; v != nil {
+				rec["input_modalities"] = v
+			}
+			if v := arch["output_modalities"]; v != nil {
+				rec["output_modalities"] = v
+			}
+		}
+		if v := m["supported_parameters"]; v != nil {
+			rec["supported_parameters"] = v
+		}
+		if top, ok := m["top_provider"].(map[string]any); ok && top["max_completion_tokens"] != nil {
+			rec["max_output"] = top["max_completion_tokens"]
+		}
+		for _, key := range []string{"knowledge_cutoff", "expiration_date"} {
+			if m[key] != nil {
+				rec[key] = m[key]
+			}
+		}
 		var aa map[string]any
 		if b, ok := m["benchmarks"].(map[string]any); ok {
 			aa, _ = b["artificial_analysis"].(map[string]any)
@@ -1054,10 +1151,20 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 			costN++
 		}
 		if r.MeanOutTok != nil && *r.MeanOutTok != 0 {
-			rec["ot"] = int64(math.RoundToEven(*r.MeanOutTok))
+			metrics, _ := rec["metrics"].(map[string]any)
+			if metrics == nil {
+				metrics = map[string]any{}
+				rec["metrics"] = metrics
+			}
+			metrics["output_tokens"] = int64(math.RoundToEven(*r.MeanOutTok))
 		}
 		if r.MeanSteps != nil && *r.MeanSteps != 0 {
-			rec["st"] = roundN(*r.MeanSteps, 1)
+			metrics, _ := rec["metrics"].(map[string]any)
+			if metrics == nil {
+				metrics = map[string]any{}
+				rec["metrics"] = metrics
+			}
+			metrics["steps"] = roundN(*r.MeanSteps, 1)
 		}
 		if date != "" {
 			rec["d"] = date
@@ -1113,6 +1220,8 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 	b["cost_basis"] = "task"
 	b["dated_n"] = len(recs)
 	b["uncertainty_n"] = ciN
+	b["trace_n"] = 0
+	b["metrics_n"] = len(recs)
 	b["featured"] = featured["deepswe"]
 	b["source_url"] = "https://deepswe.datacurve.ai/"
 	b["via"] = "Datacurve (live)"
@@ -1219,7 +1328,7 @@ func buildQuality(now string, benchmarks map[string]any, scores []map[string]any
 	}
 
 	oids := map[string]bool{}
-	duplicateIDs, dated, costed, uncertain := 0, 0, 0, 0
+	duplicateIDs, dated, costed, uncertain, traced, metered := 0, 0, 0, 0, 0, 0
 	for _, s := range scores {
 		if id, _ := s["oid"].(string); id == "" || oids[id] {
 			duplicateIDs++
@@ -1235,6 +1344,12 @@ func buildQuality(now string, benchmarks map[string]any, scores []map[string]any
 		if s["ci"] != nil || s["lo"] != nil || s["se"] != nil || s["sd"] != nil {
 			uncertain++
 		}
+		if s["trace"] != nil {
+			traced++
+		}
+		if metrics, _ := s["metrics"].(map[string]any); len(metrics) > 0 {
+			metered++
+		}
 	}
 
 	coverageKeys := []string{"org", "release_date", "open_weights", "flop", "params", "price_in", "context"}
@@ -1242,6 +1357,8 @@ func buildQuality(now string, benchmarks map[string]any, scores []map[string]any
 		"eval_date":   map[string]any{"rows": dated, "total": len(scores), "percent": pct(dated, len(scores))},
 		"cost":        map[string]any{"rows": costed, "total": len(scores), "percent": pct(costed, len(scores))},
 		"uncertainty": map[string]any{"rows": uncertain, "total": len(scores), "percent": pct(uncertain, len(scores))},
+		"trace":       map[string]any{"rows": traced, "total": len(scores), "percent": pct(traced, len(scores))},
+		"metrics":     map[string]any{"rows": metered, "total": len(scores), "percent": pct(metered, len(scores))},
 	}
 	for _, key := range coverageKeys {
 		n := 0
@@ -1311,7 +1428,7 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	return os.Rename(tmp, path)
 }
 
-// fetchAndWrite runs the full pipeline and writes data/data.js + price_history.jsonl.
+// fetchAndWrite runs the full pipeline and writes data/data.{json,js} + price_history.jsonl.
 // Returns a human-readable report.
 func fetchAndWrite(root string) (string, error) {
 	dataDir := filepath.Join(root, "data")
@@ -1365,7 +1482,8 @@ func fetchAndWrite(root string) (string, error) {
 		if b, _ := benchmarks["deepswe"].(map[string]any); b != nil {
 			parseDiag.Benchmarks["deepswe"] = map[string]any{
 				"source_rows": n, "parsed_rows": n, "dated_rows": n, "cost_rows": n,
-				"uncertainty_rows": n, "score_col": "Pass@1", "via": "Datacurve (live)",
+				"uncertainty_rows": n, "trace_rows": 0, "metrics_rows": n,
+				"score_col": "Pass@1", "via": "Datacurve (live)",
 			}
 		}
 	}
@@ -1414,6 +1532,11 @@ func fetchAndWrite(root string) (string, error) {
 			m["price_out"] = roundN(orm["price_out"].(float64), 4)
 			m["context"] = orm["context"]
 			m["or_id"] = orm["or_id"]
+			for _, key := range []string{"created", "input_modalities", "output_modalities", "supported_parameters", "max_output", "knowledge_cutoff", "expiration_date"} {
+				if orm[key] != nil {
+					m[key] = orm[key]
+				}
+			}
 			if nm, _ := orm["name"].(string); nm != "" {
 				// OpenRouter names are clean ("Anthropic: Claude Opus 4.8");
 				// Epoch's Name column is often a harness id
@@ -1460,6 +1583,23 @@ func fetchAndWrite(root string) (string, error) {
 		return "", err
 	}
 	payload := map[string]any{
+		"schema_version": 2,
+		"schema": map[string]any{
+			"observation": map[string]string{
+				"oid": "stable observation id", "m": "exact model revision id", "b": "benchmark id",
+				"v": "score", "sm": "source model id", "sid": "source row id", "dn": "source display name",
+				"e": "reasoning effort", "cfg": "source-published configuration", "c": "reported benchmark cost",
+				"d": "evaluation date", "evaluated_at": "evaluation timestamp", "rd": "model release date",
+				"ci": "95% confidence half-width", "lo": "confidence lower bound", "hi": "confidence upper bound",
+				"se": "standard error", "sd": "standard deviation", "src": "source URL", "trace": "run trace/log URL",
+				"bv": "benchmark version", "metrics": "source-published resource and diagnostic metrics", "notes": "source notes",
+			},
+			"metric_units": map[string]string{
+				"total_tokens": "tokens", "input_tokens": "tokens", "output_tokens": "tokens", "steps": "steps",
+				"latency_seconds": "seconds", "wall_clock_hours": "hours", "votes": "votes", "runs": "runs",
+				"pass_at_4": "source score", "calibration_error": "source score", "spend_usd": "USD", "checkpoints": "count",
+			},
+		},
 		"provenance": map[string]any{
 			"fetched_at":  now,
 			"epoch_etag":  etagAny,
@@ -1486,6 +1626,7 @@ func fetchAndWrite(root string) (string, error) {
 		return "", err
 	}
 	outPath := filepath.Join(dataDir, "data.js")
+	jsonPath := filepath.Join(dataDir, "data.json")
 	qualityPath := filepath.Join(dataDir, "quality.json")
 	historyPath := filepath.Join(dataDir, "price_history.jsonl")
 
@@ -1517,6 +1658,7 @@ func fetchAndWrite(root string) (string, error) {
 	}{
 		{historyPath, history},
 		{qualityPath, append(qualityBlob, '\n')},
+		{jsonPath, append(blob, '\n')},
 		{outPath, append(append([]byte("window.PARETO = "), blob...), []byte(";\n")...)},
 	}
 	for _, o := range outputs {

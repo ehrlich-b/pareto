@@ -1,0 +1,26 @@
+# AI Pareto Explorer
+
+> An auditable model-selection dataset and interactive Pareto-frontier explorer spanning roughly 75 AI benchmarks. It preserves exact model revisions, benchmark configurations, source dates and links, uncertainty, reported costs, execution metrics, and current token prices.
+
+The site has no chatbot. The primary artifact is a versioned, validated JSON snapshot suitable for crawlers, agents, notebooks, and applications. Missing values mean the source did not publish the field; they are never imputed.
+
+## Machine-readable resources
+
+- [API index](https://pareto.ehrlich.dev/api/v1): Endpoint directory, snapshot time, schema version, and counts.
+- [Complete JSON snapshot](https://pareto.ehrlich.dev/api/v1/snapshot): All benchmarks, exact models, observations, provenance, schema glossary, and embedded quality report.
+- [Benchmarks](https://pareto.ehrlich.dev/api/v1/benchmarks): Benchmark catalog. Filter with `?id=deepswe`.
+- [Models](https://pareto.ehrlich.dev/api/v1/models): Paginated model catalog. Filters: `q`, `org`, `open`, `offset`, `limit`.
+- [Observations](https://pareto.ehrlich.dev/api/v1/observations): Paginated observations. Filters: `benchmark`, `model`, `offset`, `limit`.
+- [Quality report](https://pareto.ehrlich.dev/api/v1/quality): Counts, field coverage, quarantines, conflicts, and validation status.
+- [OpenAPI](https://pareto.ehrlich.dev/openapi.json): API contract.
+- [Field and methodology guide](https://pareto.ehrlich.dev/llms-full.txt): Semantics, examples, and interpretation cautions.
+- [Source repository](https://github.com/ehrlich-b/pareto): Pipeline and viewer source.
+
+## Interpretation
+
+- `scores` contains observations, not one canonical score per model. Multiple configurations are intentionally retained.
+- `m` is an exact normalized model-revision id; `sm` is the source's original model id.
+- Reported benchmark cost (`c`) retains the benchmark's denominator and must be interpreted with its benchmark `cost_label` and `cost_basis`.
+- Token prices are current OpenRouter prices and are separate from historic benchmark execution cost.
+- Pareto membership depends on the selected axes and filtered cohort. The browser computes it client-side.
+- Benchmark data is attributed to Epoch AI's AI Benchmarking Hub under CC-BY 4.0. Additional provenance is embedded in the snapshot.

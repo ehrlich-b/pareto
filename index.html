@@ -4,6 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Pareto Explorer</title>
+<meta name="description" content="Explore auditable Pareto frontiers across AI benchmark score, price, cost, size, compute, context, and time. Download the underlying observations as JSON or query the public API.">
+<link rel="canonical" href="https://pareto.ehrlich.dev/">
+<link rel="alternate" type="application/json" href="/api/v1/snapshot" title="AI Pareto Explorer snapshot">
+<link rel="service-desc" type="application/vnd.oai.openapi+json" href="/openapi.json" title="OpenAPI description">
+<meta property="og:title" content="AI Pareto Explorer">
+<meta property="og:description" content="Auditable model-selection frontiers across ~75 AI benchmarks, with provenance, uncertainty, and machine-readable data.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pareto.ehrlich.dev/">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Dataset","name":"AI Pareto Explorer snapshot","description":"Normalized model benchmark observations with exact revisions, configurations, prices, provenance, dates, uncertainty, and resource metrics.","url":"https://pareto.ehrlich.dev/","license":"https://creativecommons.org/licenses/by/4.0/","isAccessibleForFree":true,"distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://pareto.ehrlich.dev/api/v1/snapshot"},{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://pareto.ehrlich.dev/api/v1/observations"}]}
+</script>
 <style>
 /* Neutrals carry a faint cool bias so they read chosen, not defaulted.
    Series hues are the validated 3-slot identity set — do not add a 4th. */
@@ -143,6 +154,25 @@ header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 18px; margin-bottom: 16px;
 }
+.evidence {
+  display: grid; grid-template-columns: repeat(6, minmax(105px, 1fr)); gap: 1px;
+  margin: 14px 0 2px; overflow: hidden; border: 1px solid var(--grid); border-radius: 8px;
+  background: var(--grid);
+}
+.ev { min-width: 0; padding: 9px 10px; background: var(--page); }
+.ev .ek { display:block; font: 600 9.5px/1.2 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.ev .evv { display:block; margin-top:4px; font: 600 12.5px/1.25 var(--mono); color:var(--ink); overflow-wrap:anywhere; }
+.ev a { color: var(--ink); }
+.data-access { position:relative; }
+.data-access summary { cursor:pointer; color:var(--ink-2); font-size:12.5px; }
+.data-access .access-pop {
+  position:absolute; z-index:35; right:0; top:calc(100% + 6px); width:min(440px, calc(100vw - 44px));
+  padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--surface);
+  box-shadow:0 4px 16px rgba(0,0,0,.15); color:var(--ink-2); font-size:12.5px;
+}
+.data-access .access-links { display:flex; gap:7px; flex-wrap:wrap; margin-top:9px; }
+.data-access a { color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:4px 7px; text-decoration:none; }
+.data-access code { font:11px var(--mono); }
 .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
 .row + .row { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--grid); }
 .grp { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
@@ -209,6 +239,8 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 .frontier-ext { fill: none; stroke: var(--front); stroke-width: 2; stroke-dasharray: 2 5; stroke-linecap: round; opacity: .65; }
 .regionlbl { font: 600 10px var(--mono); letter-spacing: .14em; fill: var(--muted); opacity: .85; }
 .pt { transition: opacity .12s; }
+.pt:focus { outline: none; }
+.pt:focus .ring, .pt:focus > :last-child { stroke: var(--accent); stroke-width: 2.5; }
 /* dominated points recede so the frontier is the loudest mark on the plot */
 .pt-dom { opacity: .45; }
 .pt-dom:hover { opacity: 1; }
@@ -228,6 +260,7 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 #tip table { border-collapse: collapse; }
 #tip td { padding: 1px 0; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #tip td:first-child { color: var(--muted); padding-right: 12px; }
+#tip td:last-child { white-space: normal; }
 #tip .age { color: var(--muted); }
 #tip .tip-hero { display: flex; gap: 18px; align-items: flex-end; margin: 7px 0 8px; }
 #tip .tip-hero .hv { font: 600 17px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -268,6 +301,10 @@ footer code { font: 11.5px var(--mono); }
   .ctl select { max-width: calc(100vw - 120px); }
   .row input[type="text"] { max-width: calc(100vw - 120px); }
   .grp { flex-wrap: wrap; white-space: normal; }
+  .evidence { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+  .readout .rstats { margin-left:0; width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 14px; }
+  #encodings { flex:1 1 100%; flex-wrap:wrap; gap:8px 12px !important; }
+  #encodings .enc { flex:1 1 130px; align-items:flex-start; }
 }
 </style>
 </head>
@@ -284,7 +321,8 @@ footer code { font: 11.5px var(--mono); }
 
   <div class="card">
     <div class="row">
-      <span class="grp"><label class="ctl">Benchmark <select id="bench"></select></label></span>
+      <span class="grp"><label class="ctl">Benchmark <select id="bench" aria-label="Benchmark"></select></label>
+        <input type="text" id="benchfind" list="benchlist" placeholder="find benchmark…" aria-label="Find a benchmark"><datalist id="benchlist"></datalist></span>
       <span class="grp">
         <label class="ctl">X <select id="xaxis"></select></label>
         <label class="ctl">Y <select id="yaxis"></select></label>
@@ -294,6 +332,7 @@ footer code { font: 11.5px var(--mono); }
         <span class="glabel">Presets</span>
         <button class="preset" data-x="blended" data-y="score" data-needs="blended">$ vs score</button>
         <button class="preset" data-x="date" data-y="score" data-needs="date">progress over time</button>
+        <button class="preset" data-x="eval_date" data-y="score" data-needs="eval_date">eval records</button>
         <button class="preset" data-x="params" data-y="score" data-needs="params">size vs score</button>
       </span>
     </div>
@@ -315,13 +354,18 @@ footer code { font: 11.5px var(--mono); }
       <span class="sep"></span>
       <input type="text" id="find" placeholder="find model…" title="Highlights matching models in the chart and table">
       <button id="copylink" title="Copy a link to this exact view">copy view link</button>
+      <details class="data-access" id="dataaccess"><summary>Data &amp; API</summary><div class="access-pop">
+        The complete validated snapshot and smaller filtered endpoints are public, CORS-enabled, and documented for scripts, crawlers, and agents.
+        <div class="access-links"><a href="/api/v1/snapshot" download>JSON snapshot</a><a href="/api/v1">API index</a><a href="/openapi.json">OpenAPI</a><a href="/data/quality.json">quality</a><a href="/llms.txt">llms.txt</a></div>
+      </div></details>
       <div class="viewtabs">
         <button id="tab-scatter" class="on">Scatter</button>
         <button id="tab-table">Table</button>
       </div>
     </div>
+    <div class="evidence" id="evidence" aria-label="Benchmark evidence coverage"></div>
     <div class="readout" id="readout"></div>
-    <div id="chart"><div id="tip"></div></div>
+    <div id="chart"><div id="tip" role="dialog" aria-live="polite"></div></div>
     <div id="tablewrap" style="display:none; overflow-x:auto"></div>
     <div class="legend" id="legend"></div>
     <div class="subnote" id="note"></div>
@@ -364,7 +408,9 @@ const fmtFlop = v => v == null ? "—" : v.toExponential(1).replace("e+", "e");
 const fmtDate = d => d ? d.toISOString().slice(0,10) : "—";
 function ageStr(d) {
   if (!d) return null;
-  const days = Math.round((NOW - d) / 864e5);
+  // Source dates are usually day-granularity UTC midnights; floor elapsed days
+  // so a run from yesterday never renders as two days old late in the evening.
+  const days = Math.floor((NOW - d) / 864e5);
   if (days <= 0) return "today";
   if (days < 60) return days + "d ago";
   if (days < 540) return Math.round(days/30) + "mo ago";
@@ -391,6 +437,8 @@ const AXES = {
              get: p => p.M.price_out, fmt: fmtMoney, tick: fmtMoneyTick },
   date:    { label: () => "Release date", short: "a release date", dir: "down", scale: "time", neutral: true,
              get: p => p.rd, fmt: fmtDate },
+  eval_date:{ label: () => "Evaluation date", short: "an evaluation date", dir: "down", scale: "time", neutral: true,
+             get: p => p.ed, fmt: fmtDate },
   params:  { label: () => "Parameters (total)", short: "a param count", dir: "down", scale: "log", betterWord: "smaller is better",
              get: p => p.M.params, fmt: fmtSI },
   flop:    { label: () => "Training compute (FLOP)", short: "a FLOP estimate", dir: "down", scale: "log", betterWord: "less is better",
@@ -399,8 +447,12 @@ const AXES = {
              get: p => p.M.context, fmt: fmtCtx, tick: fmtCtx },
   aa_int:  { label: () => "AA intelligence index (0–100)", short: "an AA index", dir: "up", scale: "linear",
              get: p => p.M.aa && p.M.aa.intelligence_index, fmt: v => v == null ? "—" : v.toFixed(1) },
+  aa_code: { label: () => "AA coding index (0–100)", short: "an AA coding index", dir: "up", scale: "linear",
+             get: p => p.M.aa && p.M.aa.coding_index, fmt: v => v == null ? "—" : v.toFixed(1) },
+  aa_agent:{ label: () => "AA agentic index (0–100)", short: "an AA agentic index", dir: "up", scale: "linear",
+             get: p => p.M.aa && p.M.aa.agentic_index, fmt: v => v == null ? "—" : v.toFixed(1) },
 };
-const AXIS_ORDER = ["score","blended","taskcost","price_in","price_out","date","params","flop","context","aa_int"];
+const AXIS_ORDER = ["score","blended","taskcost","price_in","price_out","date","eval_date","params","flop","context","aa_int","aa_code","aa_agent"];
 
 /* ---------- state ---------- */
 const state = { bench: "deepswe", x: "blended", y: "score", range: "12",
@@ -528,6 +580,21 @@ function paretoSet(pts, ax, ay) {
     if (!dominated) front.push(p);
   }
   return front.sort((a, b) => (+a.px) - (+b.px) || (+a.py) - (+b.py));
+}
+function closestDominator(p, pts, ax, ay) {
+  const val = v => v instanceof Date ? +v : v;
+  const better = (a, b, dir) => dir === "up" ? a > b : a < b;
+  const bettereq = (a, b, dir) => dir === "up" ? a >= b : a <= b;
+  const px = val(p.px), py = val(p.py);
+  const candidates = pts.filter(q => q !== p && bettereq(val(q.px), px, ax.dir) && bettereq(val(q.py), py, ay.dir) &&
+    (better(val(q.px), px, ax.dir) || better(val(q.py), py, ay.dir)));
+  if (!candidates.length) return null;
+  const spanX = Math.max(...pts.map(q => val(q.px))) - Math.min(...pts.map(q => val(q.px))) || 1;
+  const spanY = Math.max(...pts.map(q => val(q.py))) - Math.min(...pts.map(q => val(q.py))) || 1;
+  candidates.sort((a, b) =>
+    (Math.abs(val(a.px)-px)/spanX + Math.abs(val(a.py)-py)/spanY) -
+    (Math.abs(val(b.px)-px)/spanX + Math.abs(val(b.py)-py)/spanY));
+  return candidates[0];
 }
 
 /* ---------- scales ---------- */
@@ -768,7 +835,13 @@ function renderScatter(pts, cohortN) {
   const W = chart.clientWidth || 1100;
   const H = Math.max(420, Math.min(640, Math.round(W * 0.46)));
   const m = { t: 34, r: 24, b: 46, l: 64 };
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H });
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img",
+    "aria-labelledby": "chart-title chart-desc" });
+  const svgTitle = svgEl("title", { id: "chart-title" });
+  svgTitle.textContent = `${bench().name}: ${ay.label()} by ${ax.label()}`;
+  const svgDesc = svgEl("desc", { id: "chart-desc" });
+  svgDesc.textContent = "Interactive scatter plot. Better values are toward the top right. Tab to points for details; Enter pins a point.";
+  svg.append(svgTitle, svgDesc);
   chart.appendChild(svg);
   renderLegend(usable);
 
@@ -933,7 +1006,9 @@ function renderScatter(pts, cohortN) {
     ptPos.set(p, [x, y]);
     const onFront = frontSet.has(p);
     if (state.fonly && !onFront) continue;   // frontier-only view: dominated points not drawn
-    const g = svgEl("g", { class: "pt" + (onFront ? " pt-front" : " pt-dom") });
+    const dominator = onFront ? null : closestDominator(p, usable, ax, ay);
+    const g = svgEl("g", { class: "pt" + (onFront ? " pt-front" : " pt-dom"), tabindex: "0", role: "button",
+      "aria-label": `${displayName(p)}, ${scoreFmt(p.v)} on ${bench().name}${onFront ? ", on the Pareto frontier" : dominator ? ", dominated by " + displayName(dominator) : ""}` });
     g.dataset.org = p.org;
     g.dataset.lab = p.M.org || "";
     g.dataset.name = displayName(p).toLowerCase();
@@ -966,12 +1041,20 @@ function renderScatter(pts, cohortN) {
     if (!p.ed)
       g.appendChild(svgEl("circle", { cx: x, cy: y, r: r + 3.5, class: "unknown-age" }));
     const hit = svgEl("circle", { cx: x, cy: y, r: 12, fill: "transparent", style: "cursor:pointer" });
-    hit.addEventListener("mouseenter", () => { if (!state.pin) showTip(p, x, y, frontSet.has(p), H, false); });
+    hit.addEventListener("mouseenter", () => { if (!state.pin) showTip(p, x, y, frontSet.has(p), H, false, dominator); });
     hit.addEventListener("mouseleave", () => { if (!state.pin) hideTip(); });
     hit.addEventListener("click", ev => {
       ev.stopPropagation();
       if (state.pin === pKey(p)) { state.pin = null; hideTip(true); }
-      else { state.pin = pKey(p); showTip(p, x, y, frontSet.has(p), H, true); }
+      else { state.pin = pKey(p); showTip(p, x, y, frontSet.has(p), H, true, dominator); }
+    });
+    g.addEventListener("focus", () => { if (!state.pin) showTip(p, x, y, frontSet.has(p), H, false, dominator); });
+    g.addEventListener("blur", () => { if (!state.pin) hideTip(); });
+    g.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      if (state.pin === pKey(p)) hideTip(true);
+      else { state.pin = pKey(p); showTip(p, x, y, frontSet.has(p), H, true, dominator); }
     });
     g.appendChild(hit);
     svg.appendChild(g);
@@ -1030,14 +1113,28 @@ function renderScatter(pts, cohortN) {
 }
 
 /* ---------- tooltip ---------- */
-function showTip(p, x, y, onFrontier, chartH, pinned) {
+const METRIC_META = {
+  total_tokens: ["Total tokens", fmtSI], input_tokens: ["Input tokens", fmtSI], output_tokens: ["Output tokens", fmtSI],
+  steps: ["Steps", fmtSI], latency_seconds: ["Latency", v => `${+v.toPrecision(3)}s`],
+  wall_clock_hours: ["Wall clock", v => `${+v.toPrecision(3)}h`], votes: ["Votes", fmtSI], runs: ["Runs", fmtSI],
+  pass_at_4: ["Pass@4", v => benchIsPct ? `${(100*v).toFixed(1)}%` : String(+v.toPrecision(3))],
+  calibration_error: ["Calibration error", v => String(+v.toPrecision(3))], spend_usd: ["Spend", fmtMoney], checkpoints: ["Checkpoints", fmtSI],
+};
+function metricsText(p) {
+  if (!p.metrics) return null;
+  return Object.entries(p.metrics).map(([k,v]) => {
+    const meta = METRIC_META[k] || [humanize(k), x => String(x)];
+    return `${meta[0]} ${meta[1](v)}`;
+  }).join(" · ");
+}
+function showTip(p, x, y, onFrontier, chartH, pinned, dominator) {
   const tip = $("#tip");
   const snapDate = fmtDate(parseDate(D.provenance.fetched_at));
   const rows = [];
   const add = (k, v, extra) => { if (v != null && v !== "—") rows.push(`<tr><td>${escHtml(k)}</td><td>${escHtml(v)}${extra ? ` <span class="age">${escHtml(extra)}</span>` : ""}</td></tr>`); };
   const cfg = configLabel(p);
   if (cfg) add("Configuration", cfg);
-  if (p.ot) add("Task usage", `${fmtSI(p.ot)} out-tokens${p.st ? " · " + p.st + " steps" : ""}`);
+  add("Resource use", metricsText(p));
   if (p.M.price_in != null) {
     // price movement vs the ~week-old snapshot the server keeps in price_prev
     let mv = null;
@@ -1052,21 +1149,30 @@ function showTip(p, x, y, onFrontier, chartH, pinned) {
   add("Params (total)", p.M.params ? fmtSI(p.M.params) : null);
   add("Train FLOP", p.M.flop ? fmtFlop(p.M.flop) : null);
   add("Context", p.M.context ? fmtCtx(p.M.context) : null);
+  if (p.M.max_output) add("Max output", `${fmtSI(+p.M.max_output)} tokens`);
+  if (Array.isArray(p.M.input_modalities)) add("Input modes", p.M.input_modalities.join(", "));
   add("Released", p.rd ? fmtDate(p.rd) : null, p.rd ? ageStr(p.rd) : null);
-  if (p.M.aa) add("AA intel (0–100)", p.M.aa.intelligence_index);
+  if (p.M.aa) {
+    add("AA intelligence", p.M.aa.intelligence_index);
+    add("AA coding", p.M.aa.coding_index);
+    add("AA agentic", p.M.aa.agentic_index);
+  }
   const ow = p.M.open_weights === true ? "open weights" : p.M.open_weights === false ? "closed" : "weights unknown";
   // the two axis-defining numbers lead; everything else is reference material
   const uncertainty = uncertaintyText(p);
   const hero = `<div class="tip-hero"><span class="hv">${escHtml(scoreFmt(p.v))}<span class="hk">${escHtml(humanize(bench().score_col))}</span></span>` +
     (p.c != null ? `<span class="hv">${fmtMoney(p.c)}<span class="hk">${escHtml(bench().cost_label || "reported cost")}</span></span>` : "") + `</div>`;
   if (uncertainty) add("Uncertainty", uncertainty);
+  if (dominator) add("Dominated by", displayName(dominator));
   if (p.sm) add("Source model ID", p.sm);
   if (p.bv) add("Benchmark version", p.bv);
+  if (p.notes) add("Source notes", p.notes.length > 180 ? p.notes.slice(0, 179) + "…" : p.notes);
   const sourceURL = p.src || bench().source_url;
   const prov = `<div class="tip-prov">${p.ed
-    ? `evaluated ${fmtDate(p.ed)} (${ageStr(p.ed)})`
+    ? `evaluated ${p.evaluated_at ? escHtml(p.evaluated_at) : fmtDate(p.ed)} (${ageStr(p.ed)})`
     : `evaluation date unknown — snapshot fetched ${snapDate}`}` +
     (p.M.price_in != null ? ` · prices fetched ${snapDate} via ${escHtml(p.M.price_match || "OpenRouter")}` : "") +
+    (p.trace ? ` · <a href="${escHtml(p.trace)}" target="_blank" rel="noopener">run trace ↗</a>` : "") +
     (sourceURL ? ` · <a href="${escHtml(sourceURL)}" target="_blank" rel="noopener">source ↗</a>` : "") + `</div>`;
   const isNew = p.rd && (NOW - p.rd) < 30 * 864e5;
   tip.innerHTML = `<h4><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ORG_COLOR[p.org]};margin-right:6px"></span>${escHtml(displayName(p))}${isNew ? ' <span class="newtag">new</span>' : ""}${onFrontier ? ' <span class="fr">· on frontier ★</span>' : ""}${pinned ? ' <span id="tipclose" style="float:right;cursor:pointer;color:var(--muted);padding-left:10px">✕</span>' : ""}</h4>
@@ -1099,6 +1205,8 @@ const COLS = [
   { id: "score",  label: "Score",      get: p => p.v, fmt: v => scoreFmt(v), num: true },
   { id: "unc",    label: "Uncertainty", title: "Source-published confidence interval, standard error, or standard deviation",
                   get: p => uncertaintyText(p), num: false },
+  { id: "usage",  label: "Resource use", title: "Source-published tokens, steps, latency, runs, votes, spend, or other execution metrics",
+                  get: p => metricsText(p), num: false },
   { id: "c",      label: "Reported cost", title: "Uses the source's stated denominator; see the benchmark header and source for methodology",
                   get: p => p.c, fmt: fmtMoney, num: true },
   { id: "pblend", label: "Blended $/M", title: "Blended token price, input:output weighted 3:1",
@@ -1108,8 +1216,11 @@ const COLS = [
   { id: "params", label: "Params",     get: p => p.M.params, fmt: fmtSI, num: true },
   { id: "ctx",    label: "Context",    get: p => p.M.context, fmt: fmtCtx, num: true },
   { id: "rel",    label: "Released",   get: p => p.rd, fmt: d => d ? fmtDate(d) : "—", num: true },
+  { id: "eval",   label: "Evaluated",  get: p => p.ed, fmt: d => d ? fmtDate(d) : "—", num: true },
   { id: "age",    label: "Score age",  title: "Age of the eval run, where the source publishes it",
                   get: p => p.ed, fmt: d => d ? ageStr(d) : "—", num: true },
+  { id: "version",label: "Version",     get: p => p.bv || null, num: false },
+  { id: "trace",  label: "Run trace",   get: p => p.trace || null, num: false },
 ];
 function renderTable(pts, cohortN) {
   const ax = effectiveAxis(AXES[state.x], pts), ay = effectiveAxis(AXES[state.y], pts);
@@ -1149,6 +1260,7 @@ function renderTable(pts, cohortN) {
       const w = Math.min(100, 100 * v / maxScore).toFixed(1);
       return `<td class="num" style="background:linear-gradient(to right, var(--front-fill) ${w}%, transparent ${w}%)">${txt}</td>`;
     }
+    if (c.id === "trace") return v ? `<td><a href="${escHtml(v)}" target="_blank" rel="noopener">trace ↗</a></td>` : `<td>—</td>`;
     return `<td class="${c.num ? "num" : ""}">${escHtml(txt)}</td>`;
   }).join("") + "</tr>").join("");
   $("#tablewrap").innerHTML = `<div style="text-align:right;margin:2px 0 6px"><button id="csv" title="Download the visible rows and columns as CSV">export CSV</button></div><table class="data"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -1290,7 +1402,23 @@ function renderProv() {
     <span class="pill${staleFetch ? " stale" : warn ? " warn" : ""}">${escHtml(pill)}</span>
     <span class="meta"><b>${fmtDate(fetched)}</b> snapshot fetch · OpenRouter prices fetched same run<br>
       <b>${escHtml(b.name)}:</b> ${b.n} observations via ${escHtml(b.via || "Epoch AI")} · ${dated}/${b.n} dated · ${escHtml(evalText)} · <a href="${escHtml(srcUrl)}" target="_blank" rel="noopener">source ↗</a></span>`;
-  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · DeepSWE live: <a href="https://deepswe.datacurve.ai">Datacurve</a> · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Reported benchmark costs retain the source denominator; token prices don't vary by reasoning effort · <a href="data/quality.json">quality report</a> · Data self-refreshes every 6 hours.`;
+  renderEvidence();
+  $("#foot").innerHTML = `Benchmark scores: <a href="https://epoch.ai/benchmarks">Epoch AI Benchmarking Hub</a> (CC-BY 4.0) · DeepSWE live: <a href="https://deepswe.datacurve.ai">Datacurve</a> · Prices &amp; context: <a href="https://openrouter.ai">OpenRouter</a> · AA = <a href="https://artificialanalysis.ai">Artificial Analysis</a> (indices via OpenRouter) · Reported benchmark costs retain the source denominator; token prices don't vary by reasoning effort · <a href="/api/v1/snapshot">JSON snapshot</a> · <a href="/api/v1">API</a> · <a href="/openapi.json">OpenAPI</a> · <a href="data/quality.json">quality report</a> · Data self-refreshes every 6 hours.`;
+}
+function renderEvidence() {
+  const b = bench(), rows = D.scores.filter(s => s.b === b.id);
+  const models = new Set(rows.map(s => s.m)).size;
+  const pctOf = n => b.n ? Math.round(100*n/b.n) + "%" : "0%";
+  const versions = Array.isArray(b.versions) ? b.versions : [];
+  const cells = [
+    ["Observations", `${b.n} runs`],
+    ["Exact models", `${models} revisions`],
+    ["Evaluation dates", `${b.dated_n || 0} · ${pctOf(b.dated_n || 0)}`],
+    ["Uncertainty", `${b.uncertainty_n || 0} · ${pctOf(b.uncertainty_n || 0)}`],
+    ["Run evidence", `${b.trace_n || 0} traces · ${b.metrics_n || 0} metered`],
+    ["Benchmark version", versions.length ? versions.slice(-2).join(" · ") : "not published"],
+  ];
+  $("#evidence").innerHTML = cells.map(([k,v], i) => `<span class="ev"${i === 4 ? ' title="Source-published logs or resource metrics such as tokens, steps, latency, runs, or votes"' : ""}><span class="ek">${escHtml(k)}</span><span class="evv">${escHtml(v)}</span></span>`).join("");
 }
 function syncPresets(allPts) {
   const have = k => allPts.filter(p => AXES[k].get(p) != null).length >= 3;
@@ -1363,13 +1491,12 @@ function renderControls() {
   bsel.innerHTML = grp("Featured", feat) +
     Object.keys(CAT_LABEL).filter(c => byCat.has(c)).map(c =>
       grp(CAT_LABEL[c], byCat.get(c).sort((a, b) => a.name.localeCompare(b.name)))).join("");
+  $("#benchlist").innerHTML = Object.values(D.benchmarks).sort((a,b) => a.name.localeCompare(b.name))
+    .map(b => `<option value="${escHtml(b.name)}">${escHtml(b.id)} · ${b.n} observations</option>`).join("");
 
   for (const id of ["xaxis", "yaxis"]) {
     const sel = $("#" + id);
-    sel.innerHTML = AXIS_ORDER.map(k => `<option value="${k}">${
-      k === "score" ? "Benchmark score" :
-      k === "aa_int" ? "AA intelligence index" : AXES[k].label()
-    }</option>`).join("");
+    sel.innerHTML = AXIS_ORDER.map(k => `<option value="${k}">${k === "score" ? "Benchmark score" : AXES[k].label()}</option>`).join("");
   }
   syncControls();
 
@@ -1389,12 +1516,23 @@ function renderControls() {
   });
   pop.querySelectorAll(".lab").forEach(b => b.addEventListener("change", sync));
 
-  $("#bench").addEventListener("change", e => {
-    state.bench = e.target.value;
+  const selectBenchmark = id => {
+    state.bench = id;
     if (AXES[state.x].needsCost && !bench().has_cost) { state.x = "blended"; }
     if (AXES[state.y].needsCost && !bench().has_cost) { state.y = "score"; }
     syncControls(); render();
-  });
+  };
+  $("#bench").addEventListener("change", e => selectBenchmark(e.target.value));
+  const chooseFoundBenchmark = exactOnly => {
+    const q = $("#benchfind").value.trim().toLowerCase();
+    if (!q) return;
+    const all = Object.values(D.benchmarks);
+    const found = all.find(b => b.name.toLowerCase() === q || b.id.toLowerCase() === q) ||
+      (!exactOnly && all.find(b => b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q)));
+    if (found) { selectBenchmark(found.id); $("#benchfind").value = ""; }
+  };
+  $("#benchfind").addEventListener("change", () => chooseFoundBenchmark(false));
+  $("#benchfind").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); chooseFoundBenchmark(false); } });
   $("#xaxis").addEventListener("change", e => { const v = e.target.value; if (v === state.y) state.y = state.x; state.x = v; syncControls(); render(); });
   $("#yaxis").addEventListener("change", e => { const v = e.target.value; if (v === state.x) state.x = state.y; state.y = v; syncControls(); render(); });
   $("#range").addEventListener("change", e => { state.range = e.target.value; render(); });
@@ -1420,7 +1558,9 @@ function renderControls() {
     catch (e) { btn.textContent = "copy failed"; }
     setTimeout(() => btn.textContent = "copy link", 1400);
   });
-  document.addEventListener("click", e => { const d = $("#labs"); if (d.open && !d.contains(e.target)) d.open = false; });
+  document.addEventListener("click", e => {
+    for (const id of ["labs", "dataaccess"]) { const d = $("#" + id); if (d.open && !d.contains(e.target)) d.open = false; }
+  });
 }
 
 let resizeT;

@@ -2,19 +2,31 @@
 
 import fs from "node:fs";
 import vm from "node:vm";
+import path from "node:path";
 
 const filename = process.argv[2] || "data/data.js";
-const context = { window: {} };
-vm.runInNewContext(fs.readFileSync(filename, "utf8"), context, { filename });
-const D = context.window.PARETO;
+let D;
+if (filename.endsWith(".json")) D = JSON.parse(fs.readFileSync(filename, "utf8"));
+else {
+  const context = { window: {} };
+  vm.runInNewContext(fs.readFileSync(filename, "utf8"), context, { filename });
+  D = context.window.PARETO;
+}
 const fail = message => { throw new Error(message); };
 
 if (!D || !D.benchmarks || !D.models || !Array.isArray(D.scores)) fail("snapshot envelope is incomplete");
+if (D.schema_version !== 2 || !D.schema?.observation || !D.schema?.metric_units) fail("snapshot schema v2 glossary is missing");
 if (!D.quality || D.quality.gates?.status !== "pass") fail("embedded quality gate is not passing");
+
+const siblingJSON = filename.endsWith(".js") ? path.join(path.dirname(filename), "data.json") : null;
+if (siblingJSON && fs.existsSync(siblingJSON)) {
+  const jsonD = JSON.parse(fs.readFileSync(siblingJSON, "utf8"));
+  if (JSON.stringify(jsonD) !== JSON.stringify(D)) fail("data.json and data.js payloads differ");
+}
 
 const ids = new Set();
 const byBenchmark = new Map();
-let dated = 0, costed = 0, uncertain = 0;
+let dated = 0, costed = 0, uncertain = 0, traced = 0, metered = 0;
 for (const s of D.scores) {
   if (!s.oid || ids.has(s.oid)) fail(`duplicate/missing observation id: ${s.oid || "<missing>"}`);
   ids.add(s.oid);
@@ -30,6 +42,8 @@ for (const s of D.scores) {
   dated += s.d ? 1 : 0;
   costed += s.c != null ? 1 : 0;
   uncertain += s.ci != null || s.lo != null || s.se != null || s.sd != null ? 1 : 0;
+  traced += s.trace ? 1 : 0;
+  metered += s.metrics && Object.keys(s.metrics).length ? 1 : 0;
 }
 
 for (const [id, b] of Object.entries(D.benchmarks)) {
@@ -43,8 +57,8 @@ for (const [id, m] of Object.entries(D.models)) {
 const counts = D.quality.counts || {};
 if (counts.benchmarks !== Object.keys(D.benchmarks).length || counts.models !== Object.keys(D.models).length || counts.scores !== D.scores.length)
   fail("embedded quality counts do not match payload");
-for (const [key, value] of [["eval_date", dated], ["cost", costed], ["uncertainty", uncertain]]) {
+for (const [key, value] of [["eval_date", dated], ["cost", costed], ["uncertainty", uncertain], ["trace", traced], ["metrics", metered]]) {
   if (D.quality.coverage?.[key]?.rows !== value) fail(`${key} coverage does not match payload`);
 }
 
-console.log(`snapshot ok: ${Object.keys(D.benchmarks).length} benchmarks · ${D.scores.length} observations · ${Object.keys(D.models).length} exact models · ${costed} costs · ${uncertain} uncertainty records · ${dated} dated runs · quality ${D.quality.status}`);
+console.log(`snapshot ok: ${Object.keys(D.benchmarks).length} benchmarks · ${D.scores.length} observations · ${Object.keys(D.models).length} exact models · ${costed} costs · ${uncertain} uncertainty · ${dated} dated · ${traced} traces · ${metered} metered · quality ${D.quality.status}`);

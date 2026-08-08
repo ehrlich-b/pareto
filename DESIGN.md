@@ -66,9 +66,10 @@ What landed (all in `index.html`):
 ## Roadmap (usability review 2026-08-07 — site is SHARED now; per deploy: run the
 ## 6,660-combo sweep, never break URL-hash back-compat)
 
-Facts behind the review: only 3/74 Epoch benchmarks publish per-row eval dates
-(terminalbench 202/202, gso 20/38, aider 9/72 — 4% of rows); everything else
-falls back to snapshot date in the tooltip. Epoch also lags source leaderboards
+Facts behind the review: evaluation dates are sparse and must never be inferred;
+the pipeline now recognizes source timestamps including Epoch-internal `Started at`
+values as well as external run/evaluation dates. Unknown dates remain explicit.
+Epoch also lags source leaderboards
 (DeepSWE: Epoch has v1, 50 runs/18 models; datacurve is on v1.1, 113 tasks/21
 models, with ±CIs and effort badges).
 
@@ -92,7 +93,7 @@ All four phases SHIPPED 2026-08-08 (repo is git now; one commit per phase):
    window resize can't go below ~1560).
 
 Not built (didn't clear the "wanted" bar): side-by-side compare view;
-superlative top-4 cards; picker filter input.
+superlative top-4 cards.
 
 Steal-list sources for later: artificialanalysis.ai (superlative cards,
 estimated-* flags), llm-stats.com (compare flow), epoch.ai/benchmarks,
@@ -121,6 +122,24 @@ sends no cache headers and Chrome's heuristic cache serves stale data.js
   commit marker.
 - Snapshot fetch age, evaluation age, and source fallback status are distinct in
   the UI. Unknown evaluation dates never render as fresh.
+
+## Evidence + availability pass (2026-08-08)
+
+- The page remains a data workbench, not a chatbot. A benchmark search control and
+  compact evidence strip expose model/run counts plus date, uncertainty, trace,
+  resource-metric, and version coverage before the chart is interpreted.
+- Evaluation date is an axis and record-line preset. Artificial Analysis coding
+  and agentic indices join the existing intelligence axis. Dominated point details
+  name a nearby observation that is at least as good on both current axes.
+- Source timestamps, additional uncertainty schemas, METR versions, run logs,
+  notes, country/compute notes, and allowlisted execution metrics survive ingestion.
+  Tooltips and sufficiently covered table columns re-present them.
+- Keyboard-focusable SVG points, chart title/description, and explicit control
+  labels make the same evidence usable without pointer-only interaction.
+- `data.json`, a versioned schema glossary, filtered CORS API, OpenAPI, llms files,
+  robots/sitemap, canonical links, and Dataset JSON-LD make the dataset available
+  independently of the page. GitHub Actions verifies Go, frontend syntax, OpenAPI,
+  snapshot parity, and data invariants.
 
 ## History
 

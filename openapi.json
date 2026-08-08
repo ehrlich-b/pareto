@@ -1,0 +1,93 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Pareto Explorer API",
+    "version": "1.0.0",
+    "description": "Read-only access to validated AI benchmark observations, exact model metadata, provenance, and quality diagnostics. No API key is required."
+  },
+  "servers": [{"url": "https://pareto.ehrlich.dev"}],
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "summary": "API index",
+        "operationId": "getApiIndex",
+        "responses": {"200": {"description": "Endpoint directory and current counts", "content": {"application/json": {"schema": {"type": "object"}}}}}
+      }
+    },
+    "/api/v1/snapshot": {
+      "get": {
+        "summary": "Complete validated snapshot",
+        "operationId": "getSnapshot",
+        "responses": {"200": {"description": "Complete snapshot envelope", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Snapshot"}}}}}
+      }
+    },
+    "/api/v1/quality": {
+      "get": {
+        "summary": "Snapshot quality report",
+        "operationId": "getQuality",
+        "responses": {"200": {"description": "Validation status, coverage, counts, and diagnostics", "content": {"application/json": {"schema": {"type": "object"}}}}}
+      }
+    },
+    "/api/v1/benchmarks": {
+      "get": {
+        "summary": "List benchmarks",
+        "operationId": "listBenchmarks",
+        "parameters": [{"name": "id", "in": "query", "description": "Exact benchmark id", "schema": {"type": "string"}, "example": "deepswe"}],
+        "responses": {"200": {"description": "Benchmark catalog", "content": {"application/json": {"schema": {"type": "object"}}}}}
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "summary": "List and search exact models",
+        "operationId": "listModels",
+        "parameters": [
+          {"$ref": "#/components/parameters/Search"}, {"name": "org", "in": "query", "schema": {"type": "string"}},
+          {"name": "open", "in": "query", "schema": {"type": "boolean"}}, {"$ref": "#/components/parameters/Offset"}, {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {"200": {"description": "Paginated exact-model records", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Paginated"}}}}}
+      }
+    },
+    "/api/v1/observations": {
+      "get": {
+        "summary": "List benchmark observations",
+        "description": "Returns source observations, not one canonical row per model. Compact field definitions are embedded in the complete snapshot.",
+        "operationId": "listObservations",
+        "parameters": [
+          {"name": "benchmark", "in": "query", "schema": {"type": "string"}, "example": "terminalbench"},
+          {"name": "model", "in": "query", "schema": {"type": "string"}}, {"$ref": "#/components/parameters/Offset"}, {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {"200": {"description": "Paginated observations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Paginated"}}}}}
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Service and snapshot health",
+        "operationId": "getHealth",
+        "responses": {"200": {"description": "Service is running with a readable snapshot", "content": {"application/json": {"schema": {"type": "object"}}}}, "503": {"description": "Snapshot unavailable"}}
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Search": {"name": "q", "in": "query", "description": "Case-insensitive id or display-name substring", "schema": {"type": "string"}},
+      "Offset": {"name": "offset", "in": "query", "schema": {"type": "integer", "minimum": 0, "default": 0}},
+      "Limit": {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 0, "maximum": 1000, "default": 100}}
+    },
+    "schemas": {
+      "Snapshot": {
+        "type": "object",
+        "required": ["schema_version", "schema", "provenance", "benchmarks", "models", "scores", "quality"],
+        "properties": {
+          "schema_version": {"type": "integer"}, "schema": {"type": "object"}, "provenance": {"type": "object"},
+          "benchmarks": {"type": "object", "additionalProperties": {"type": "object"}},
+          "models": {"type": "object", "additionalProperties": {"type": "object"}},
+          "scores": {"type": "array", "items": {"type": "object"}}, "quality": {"type": "object"}, "price_prev": {"type": "object"}
+        }
+      },
+      "Paginated": {
+        "type": "object", "required": ["total", "offset", "limit"],
+        "properties": {"total": {"type": "integer"}, "offset": {"type": "integer"}, "limit": {"type": "integer"}}
+      }
+    }
+  }
+}

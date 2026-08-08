@@ -146,3 +146,53 @@ func TestQualityGateRejectsThinSnapshot(t *testing.T) {
 		t.Fatal("thin snapshot passed quality gate")
 	}
 }
+
+func TestBenchmarkParserPreservesEvidenceFields(t *testing.T) {
+	data := zipFixture(t, map[string]string{
+		"gpqa_diamond.csv": "Model version,mean_score,Release date,Organization,Country,Training compute notes,stderr,Log viewer,Logs,Started at,Notes,id\n" +
+			"model-a,0.7,2026-01-01,Test Lab,Canada,Estimated by source,0.03,https://logs.test/run-a,https://raw.test/run-a,2026-08-07T01:02:03.000Z,reviewed,a\n",
+		"metr_time_horizons_external.csv": "Model version,Time horizon,Release date,Organization,CI_high,CI_low,METR version,id\n" +
+			"model-b,120,2026-01-02,Test Lab,180,90,METR-Horizon-v1.1,b\n",
+		"cursorbench_external.csv": "Model version,Score,Tokens per task,Steps per task,Release date,Organization,Notes,id\n" +
+			"model-c,0.5,63842,76,2026-01-03,Test Lab,full run,c\n",
+		"terminalbench_external.csv": "Model version,Accuracy mean,Accuracy SE,Release date,Organization,id\n" +
+			"model-d,0.8,0.02,2026-01-04,Test Lab,d\n",
+		"blueprint_bench_2_external.csv": "Model version,Score,Raw score standard error,Release date,Organization,id\n" +
+			"model-e,0.6,0.04,2026-01-05,Test Lab,e\n",
+	})
+	benchmarks, scores, models, _, err := parseEpochBenchmarks(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scores) != 5 {
+		t.Fatalf("got %d scores", len(scores))
+	}
+	byBench := map[string]map[string]any{}
+	for _, score := range scores {
+		byBench[score["b"].(string)] = score
+	}
+	gpqa := byBench["gpqa_diamond"]
+	if gpqa["d"] != "2026-08-07" || gpqa["evaluated_at"] != "2026-08-07T01:02:03.000Z" || gpqa["trace"] != "https://logs.test/run-a" {
+		t.Fatalf("timestamp/trace lost: %#v", gpqa)
+	}
+	if gpqa["notes"] != "reviewed" || models["model-a"]["country"] != "Canada" || models["model-a"]["flop_notes"] != "Estimated by source" {
+		t.Fatalf("notes/model evidence lost: score=%#v model=%#v", gpqa, models["model-a"])
+	}
+	metr := byBench["metr_time_horizons"]
+	if metr["lo"] != float64(90) || metr["hi"] != float64(180) || metr["bv"] != "METR-Horizon-v1.1" {
+		t.Fatalf("METR evidence lost: %#v", metr)
+	}
+	metrics, _ := byBench["cursorbench"]["metrics"].(map[string]any)
+	if metrics["total_tokens"] != int64(63842) || metrics["steps"] != int64(76) {
+		t.Fatalf("resource metrics lost: %#v", metrics)
+	}
+	for _, id := range []string{"terminalbench", "blueprint_bench_2"} {
+		if byBench[id]["se"] == nil {
+			t.Fatalf("%s standard error lost: %#v", id, byBench[id])
+		}
+	}
+	b, _ := benchmarks["gpqa_diamond"].(map[string]any)
+	if b["dated_n"] != 1 || b["trace_n"] != 1 {
+		t.Fatalf("benchmark evidence counts wrong: %#v", b)
+	}
+}

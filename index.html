@@ -303,6 +303,7 @@ footer code { font: 11.5px var(--mono); }
         <option value="closed">closed only</option>
       </select></label>
       <label class="chk" title="Keeps only the highest-scoring reasoning-effort configuration of each model. Uncheck to see every configuration — cheap low-effort configs often sit on the real cost frontier."><input type="checkbox" id="best" checked> best reasoning-effort config only</label>
+      <label class="chk" title="Hide every dominated model — declutters dense benchmarks; the frontier itself is unchanged"><input type="checkbox" id="fonly"> frontier only</label>
       <span class="sep"></span>
       <input type="text" id="find" placeholder="find model…" title="Highlights matching models in the chart and table">
       <button id="copylink" title="Copy a link to this exact view">copy view link</button>
@@ -395,7 +396,7 @@ const AXIS_ORDER = ["score","blended","taskcost","price_in","price_out","date","
 /* ---------- state ---------- */
 const state = { bench: "deepswe", x: "blended", y: "score", range: "12",
                 weights: "all", best: true, view: "scatter",
-                offOrgs: new Set(), offLabs: new Set(), labSel: null,
+                offOrgs: new Set(), offLabs: new Set(), labSel: null, fonly: false,
                 sortCol: "score", sortDir: -1, hover: null, find: "", pin: null };
 if (!D.benchmarks[state.bench]) state.bench = Object.keys(D.benchmarks)[0];
 function readHash() {
@@ -403,6 +404,7 @@ function readHash() {
     const h = new URLSearchParams(location.hash.slice(1));
     for (const k of ["bench","x","y","range","weights"]) if (h.get(k)) state[k] = h.get(k);
     if (h.get("best")) state.best = h.get("best") === "1";
+    if (h.get("fonly")) state.fonly = h.get("fonly") === "1";
     if (!D.benchmarks[state.bench]) state.bench = "deepswe";
     if (!AXES[state.x]) state.x = "blended";
     if (!AXES[state.y]) state.y = "score";
@@ -413,6 +415,7 @@ readHash();
 function writeHash() {
   const h = new URLSearchParams({ bench: state.bench, x: state.x, y: state.y,
     range: state.range, weights: state.weights, best: state.best ? "1" : "0" });
+  if (state.fonly) h.set("fonly", "1");   // additive param — old links stay valid
   // sandboxed/cross-origin embeds reject history writes — the view still works, it just isn't linkable
   try { history.replaceState(null, "", "#" + h.toString()); } catch { /* not linkable here */ }
 }
@@ -897,6 +900,7 @@ function renderScatter(pts, cohortN) {
     const x = sx.f(p.px), y = sy.f(p.py);
     ptPos.set(p, [x, y]);
     const onFront = frontSet.has(p);
+    if (state.fonly && !onFront) continue;   // frontier-only view: dominated points not drawn
     const g = svgEl("g", { class: "pt" + (onFront ? " pt-front" : " pt-dom") });
     g.dataset.org = p.org;
     g.dataset.lab = p.M.org || "";
@@ -928,7 +932,7 @@ function renderScatter(pts, cohortN) {
   }
 
   // frontier labels: background plate + leader tick + collision boxes over ALL points
-  const boxOf = new Map(usable.map(p => {
+  const boxOf = new Map(usable.filter(p => !state.fonly || frontSet.has(p)).map(p => {
     const [x, y] = ptPos.get(p);
     return [p, { x0: x - r - 2, x1: x + r + 2, y0: y - r - 2, y1: y + r + 2 }];
   }));
@@ -972,7 +976,7 @@ function renderScatter(pts, cohortN) {
 
   renderFrontierReadout(front, ax, ay, isRecord, { plotted: usable.length, r2: ffit ? ffit.r2 : null });
   funnelNote(cohortN, pts.length, usable.length, reasonsStr,
-             front.length ? `${front.length} ${isRecord ? "set the best-score-to-date record" : "on the pareto frontier"}` : "",
+             front.length ? `${front.length} ${isRecord ? "set the best-score-to-date record" : "on the pareto frontier"}${state.fonly ? " — dominated points hidden" : ""}` : "",
              "hover/tap a point · click to pin");
   renderEncodings(isRecord ? "record" : "scatter", drewFront, anyStale, usable.some(p => p.M.open_weights === true), !!ffit);
   applyFade();
@@ -1065,6 +1069,8 @@ function renderTable(pts, cohortN) {
     return filled > 0 && filled >= pts.length * 0.3;   // hide near-empty columns
   });
   const col = cols.find(c => c.id === state.sortCol) || cols.find(c => c.id === "score");
+  if (state.fonly) pts = pts.filter(p => frontSet.has(p));
+  const maxScore = Math.max(...pts.map(p => p.v).filter(v => typeof v === "number" && v > 0), 0);
   const sorted = [...pts].sort((a, b) => {
     let av = col.get(a), bv = col.get(b);
     av = av instanceof Date ? +av : av; bv = bv instanceof Date ? +bv : bv;
@@ -1080,7 +1086,11 @@ function renderTable(pts, cohortN) {
     const v = c.get(p);
     const txt = c.fmt ? c.fmt(v) : (v == null ? "—" : v);
     if (c.id === "name")
-      return `<td class="name"><span class="star"${frontSet.has(p) ? ' title="on the pareto frontier for the current axes"' : ""}>${frontSet.has(p) ? "★" : ""}</span><span class="glyph">${shapeSwatch(ORG_SHAPE[p.M.org], ORG_COLOR[p.org])}</span>${txt}${p.M.open_weights === true ? " ○" : ""}</td>`;
+      return `<td class="name"><span class="star"${frontSet.has(p) ? ' title="on the pareto frontier for the current axes"' : ""}>${frontSet.has(p) ? "★" : ""}</span><span class="glyph">${shapeSwatch(ORG_SHAPE[p.M.org], ORG_COLOR[p.org])}</span>${txt}${p.M.open_weights === true ? " ○" : ""}${p.rd && (NOW - p.rd) < 30 * 864e5 ? ' <span class="newtag">new</span>' : ""}</td>`;
+    if (c.id === "score" && maxScore > 0 && typeof v === "number" && v > 0) {
+      const w = Math.min(100, 100 * v / maxScore).toFixed(1);
+      return `<td class="num" style="background:linear-gradient(to right, var(--front-fill) ${w}%, transparent ${w}%)">${txt}</td>`;
+    }
     return `<td class="${c.num ? "num" : ""}">${txt}</td>`;
   }).join("") + "</tr>").join("");
   $("#tablewrap").innerHTML = `<div style="text-align:right;margin:2px 0 6px"><button id="csv" title="Download the visible rows and columns as CSV">export CSV</button></div><table class="data"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -1223,18 +1233,52 @@ function syncPresets(allPts) {
 function syncControls() {
   $("#bench").value = state.bench; $("#xaxis").value = state.x; $("#yaxis").value = state.y;
   $("#range").value = state.range; $("#weights").value = state.weights; $("#best").checked = state.best;
+  $("#fonly").checked = state.fonly;
 }
+/* Picker categories — viewer-side grouping; unmapped benchmarks land in Other. */
+const BENCH_CAT = {
+  aider_polyglot: "code", ale_bench: "code", algotune: "code", cursorbench: "code",
+  cybench: "code", deepswe: "code", exploitbench: "code", frontiercode: "code",
+  frontierswe: "code", gso: "code", posttrainbench: "code", scicode: "code",
+  swe_bench_verified: "code", terminalbench: "code", webdev_arena: "code", weirdml: "code",
+  frontiermath: "math", frontiermath_tier_4: "math", gsm8k: "math", math_level_5: "math",
+  otis_mock_aime_2024_2025: "math", proofbench: "math", surface_evolver_bench: "math",
+  apex_agents: "agents", blueprint_bench_2: "agents", cad_eval: "agents",
+  deepresearchbench: "agents", forecastbench: "agents", gdp_pdf: "agents", gdpval: "agents",
+  metr_time_horizons: "agents", os_world: "agents", osworld_2: "agents", rli: "agents",
+  the_agent_company: "agents", vending_bench_2: "agents",
+  arc_agi: "puzzles", arc_agi_2: "puzzles", balrog: "puzzles", btf3: "puzzles",
+  chess_puzzles: "puzzles", enigma_eval: "puzzles", gbaeval: "puzzles",
+  mystery_game_puzzles: "puzzles", simplebench: "puzzles",
+  adversarial_nli: "qa", arc_ai2: "qa", bbh: "qa", bool_q: "qa", common_sense_qa_2: "qa",
+  critpt: "qa", gpqa_diamond: "qa", hella_swag: "qa", hle: "qa", lambada: "qa",
+  live_bench: "qa", mmlu: "qa", open_book_qa: "qa", piqa: "qa", science_qa: "qa",
+  simpleqa_verified: "qa", superglue: "qa", trivia_qa: "qa", wino_grande: "qa",
+  geobench: "mm", mindcube: "mm", spatialviz_bench: "mm", video_mme: "mm", vpct: "mm",
+  cl_bench: "writing", cl_bench_life: "writing", fictionlivebench: "writing",
+  lech_mazur_writing: "writing",
+};
+const CAT_LABEL = { code: "Code & software", math: "Math", agents: "Agents & work",
+  puzzles: "Reasoning & puzzles", qa: "Knowledge & QA", mm: "Multimodal & spatial",
+  writing: "Writing & long context", other: "Other" };
 function renderControls() {
   const bsel = $("#bench");
-  const feat = [], rest = [];
-  for (const b of Object.values(D.benchmarks)) (b.featured ? feat : rest).push(b);
-  rest.sort((a, b) => a.name.localeCompare(b.name));
+  const feat = [], byCat = new Map();
+  for (const b of Object.values(D.benchmarks)) {
+    if (b.featured) { feat.push(b); continue; }
+    const cat = BENCH_CAT[b.id] || "other";
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat).push(b);
+  }
   feat.sort((a, b) => b.n - a.n);
   const opt = b => {
     const evalNote = b.latest_eval ? ` · latest ${b.latest_eval.slice(0,10)}` : "";
     return `<option value="${b.id}">${b.name} · ${b.n} eval runs${evalNote}</option>`;
   };
-  bsel.innerHTML = `<optgroup label="Featured">${feat.map(opt).join("")}</optgroup><optgroup label="All benchmarks">${rest.map(opt).join("")}</optgroup>`;
+  const grp = (label, arr) => `<optgroup label="${label}">${arr.map(opt).join("")}</optgroup>`;
+  bsel.innerHTML = grp("Featured", feat) +
+    Object.keys(CAT_LABEL).filter(c => byCat.has(c)).map(c =>
+      grp(CAT_LABEL[c], byCat.get(c).sort((a, b) => a.name.localeCompare(b.name)))).join("");
 
   for (const id of ["xaxis", "yaxis"]) {
     const sel = $("#" + id);
@@ -1272,6 +1316,7 @@ function renderControls() {
   $("#range").addEventListener("change", e => { state.range = e.target.value; render(); });
   $("#weights").addEventListener("change", e => { state.weights = e.target.value; render(); });
   $("#best").addEventListener("change", e => { state.best = e.target.checked; render(); });
+  $("#fonly").addEventListener("change", e => { state.fonly = e.target.checked; render(); });
   document.querySelectorAll("button.preset").forEach(b => b.addEventListener("click", () => {
     if (b.classList.contains("off")) return;
     state.x = b.dataset.x; state.y = b.dataset.y;

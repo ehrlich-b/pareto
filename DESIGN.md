@@ -129,7 +129,7 @@ sends no cache headers and Chrome's heuristic cache serves stale data.js
 ## Evidence + availability pass (2026-08-08)
 
 - The page remains a data workbench, not a chatbot. A searchable benchmark combobox and
-  compact evidence strip expose model/run counts plus date, uncertainty, trace,
+  collapsible evidence summary expose model/run counts plus date, uncertainty, trace,
   resource-metric, and version coverage before the chart is interpreted.
 - Evaluation date is an axis and best-observed-score history preset. Artificial Analysis coding
   and agentic indices join the existing intelligence axis. Dominated point details
@@ -161,6 +161,9 @@ sends no cache headers and Chrome's heuristic cache serves stale data.js
 - `scripts/audit_browser.py` is the release gate: quick mode covers all 11,544
   ordered benchmark/axis scatter combinations; full mode covers 49,728 rendered
   axis, view, and filter states.
+- The default hierarchy is controls → answer → chart. Coverage details and full
+  frontier membership remain accessible disclosures instead of permanently
+  occupying several rows above the visualization.
 
 ## History
 

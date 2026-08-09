@@ -40,7 +40,8 @@ so views are shareable/bookmarkable. The default view is DeepSWE mean reported c
 task vs benchmark score over the latest 12 months.
 
 Viewer: search or browse all benchmarks in one keyboard-accessible combobox; unavailable
-axes are disabled for the selected benchmark. Click or keyboard-focus a point for its
+axes are disabled for the selected benchmark. Coverage and the full frontier-model list
+stay one click away without crowding the plot. Click or keyboard-focus a point for its
 evidence; pin tooltips; use `find model…` to highlight; and use legend chips to toggle labs.
 Dominated points name a nearby model that beats them on both selected axes. Table view
 sorts, shows source resource/trace fields when sufficiently covered, and exports CSV.

@@ -126,8 +126,8 @@ header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap
 
 /* ---- frontier readout: the chart's header — the answer in words + numbers ---- */
 .readout {
-  display: flex; flex-direction: column; gap: 9px;
-  padding: 14px 2px 13px; margin-top: 13px; border-top: 1px solid var(--grid);
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px 2px 8px; margin-top: 2px;
 }
 .readout .rhead { display: flex; align-items: baseline; gap: 8px 18px; flex-wrap: wrap; }
 .readout .rtitle { font-size: 17px; font-weight: 620; letter-spacing: -0.012em; color: var(--ink); }
@@ -136,10 +136,23 @@ header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap
 .stat { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .stat .k { font: 600 10px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
 .stat .v { font: 600 13.5px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
-.readout .rlabel {
+.readout .rlabel, .evsum-label {
   font: 600 10.5px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--muted);
 }
 .readout .rlist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.frontier-details summary {
+  display:flex; align-items:baseline; gap:10px; min-width:0; padding:4px 0;
+  cursor:pointer; list-style:none; color:var(--ink-2);
+}
+.frontier-details summary::-webkit-details-marker { display:none; }
+.frontier-details .rpreview {
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:500 11.5px/1.3 var(--mono); color:var(--ink-2);
+}
+.frontier-details .rtoggle { margin-left:auto; flex:none; font-size:11.5px; color:var(--muted); }
+.frontier-details .rtoggle::before { content:"show all"; }
+.frontier-details[open] .rtoggle::before { content:"hide"; }
+.frontier-details[open] .rlist { margin-top:5px; }
 .fchip {
   display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font: 500 12px/1 var(--mono); padding: 5px 9px; border-radius: 6px;
@@ -154,9 +167,28 @@ header .sub { color: var(--ink-2); font-size: 14.5px; max-width: 64ch; text-wrap
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 18px; margin-bottom: 16px;
 }
+.chartbar {
+  display:flex; align-items:flex-start; gap:14px; margin-top:12px; padding-top:9px;
+  border-top:1px solid var(--grid);
+}
+.evidence-details { flex:1 1 auto; min-width:0; }
+.evidence-details summary {
+  display:flex; align-items:baseline; gap:9px; min-width:0; padding:5px 2px;
+  cursor:pointer; list-style:none; color:var(--muted);
+}
+.evidence-details summary::-webkit-details-marker { display:none; }
+.evidence-details summary::before { content:"▸"; flex:none; color:var(--muted); font-size:10px; }
+.evidence-details[open] summary::before { content:"▾"; }
+.evidence-details .evsum {
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:500 11.5px/1.3 var(--mono); color:var(--ink-2);
+}
+.evidence-details .evmore { margin-left:auto; flex:none; font-size:11.5px; color:var(--muted); }
+.evidence-details .evmore::before { content:"details"; }
+.evidence-details[open] .evmore::before { content:"hide"; }
 .evidence {
   display: grid; grid-template-columns: repeat(6, minmax(105px, 1fr)); gap: 1px;
-  margin: 14px 0 2px; overflow: hidden; border: 1px solid var(--grid); border-radius: 8px;
+  margin: 7px 0 2px; overflow: hidden; border: 1px solid var(--grid); border-radius: 8px;
   background: var(--grid);
 }
 .ev { min-width: 0; padding: 9px 10px; background: var(--page); }
@@ -292,7 +324,7 @@ details.labs .pop label { display: flex; gap: 6px; align-items: center; padding:
 #tip .tip-prov { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--grid); color: var(--muted); font-size: 10.5px; max-width: 290px; white-space: normal; line-height: 1.45; }
 .newtag { font: 700 8.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
   color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 4px; margin-left: 4px; vertical-align: 2px; }
-.viewtabs { margin-left: auto; display: flex; gap: 4px; }
+.viewtabs { margin-left: auto; display: flex; gap: 4px; flex:none; }
 .viewtabs button.on { border-color: var(--accent); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
 .subnote { font: 11.5px/1.5 var(--mono); color: var(--muted); margin-top: 10px; min-height: 2.4em; }
 .subnote b { color: var(--ink-2); font-weight: 600; }
@@ -325,6 +357,7 @@ footer code { font: 11.5px var(--mono); }
   .row input[type="text"] { max-width: calc(100vw - 120px); }
   .grp { flex-wrap: wrap; white-space: normal; }
   .evidence { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+  .evidence-details .evmore { display:none; }
   .readout .rstats { margin-left:0; width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 14px; }
   #encodings { flex:1 1 100%; flex-wrap:wrap; gap:8px 12px !important; }
   #encodings .enc { flex:1 1 130px; align-items:flex-start; }
@@ -385,12 +418,17 @@ footer code { font: 11.5px var(--mono); }
         The complete validated snapshot and smaller filtered endpoints are public, CORS-enabled, and documented for scripts, crawlers, and agents.
         <div class="access-links"><a href="/api/v1/snapshot" download>JSON snapshot</a><a href="/api/v1">API index</a><a href="/openapi.json">OpenAPI</a><a href="/data/quality.json">quality</a><a href="/llms.txt">llms.txt</a></div>
       </div></details>
+    </div>
+    <div class="chartbar">
+      <details class="evidence-details" id="evidencebox">
+        <summary><span class="evsum-label">Coverage</span><span class="evsum" id="evidence-summary"></span><span class="evmore" aria-hidden="true"></span></summary>
+        <div class="evidence" id="evidence" aria-label="Benchmark evidence coverage"></div>
+      </details>
       <div class="viewtabs">
         <button id="tab-scatter" class="on">Scatter</button>
         <button id="tab-table">Table</button>
       </div>
     </div>
-    <div class="evidence" id="evidence" aria-label="Benchmark evidence coverage"></div>
     <div class="readout" id="readout"></div>
     <div id="chart"><div id="tip" role="dialog" aria-live="polite"></div></div>
     <div id="tablewrap" style="display:none; overflow-x:auto"></div>
@@ -485,7 +523,8 @@ const AXIS_ORDER = ["score","blended","taskcost","price_in","price_out","date","
 const state = { bench: "deepswe", x: "taskcost", y: "score", range: "12",
                 weights: "all", best: true, view: "scatter",
                 offOrgs: new Set(), offLabs: new Set(), labSel: null, fonly: false,
-                sortCol: "score", sortDir: -1, hover: null, find: "", pin: null };
+                sortCol: "score", sortDir: -1, hover: null, find: "", pin: null,
+                frontierOpen: false };
 if (!D.benchmarks[state.bench]) state.bench = Object.keys(D.benchmarks)[0];
 function readHash() {
   try {
@@ -852,15 +891,10 @@ function renderFrontierReadout(front, ax, ay, isRecord, extra) {
   const dateKind = ax.get === AXES.eval_date.get ? "evaluation" : "release";
   const historyLabel = ay.get === AXES.score.get ? `Best score as of each ${dateKind} date` : "Historical frontier";
   if (extra && extra.plotted > 0) {
-    stats.push(st(isRecord ? "new bests" : "on frontier", front.length));
-    stats.push(st("beaten", extra.plotted - front.length));
-    if (extra.r2 != null) stats.push(st("frontier fit r²", extra.r2.toFixed(2),
+    stats.push(st(isRecord ? "new bests" : "frontier", front.length));
+    stats.push(st("dominated", extra.plotted - front.length));
+    if (extra.r2 != null) stats.push(st("fit r²", extra.r2.toFixed(2),
       "How well the frontier models fit one straight line in log/logit space — 1.00 means the tradeoff follows a clean law"));
-    const le = parseDate(bench().latest_eval);
-    if (le) stats.push(st("evals thru", fmtDate(le),
-      "Latest published evaluation date on this benchmark — most Epoch benchmarks publish no per-run dates"));
-    stats.push(st("dated runs", `${bench().dated_n || 0}/${bench().n}`,
-      "Runs with a source-published evaluation date; unknown dates are never treated as fresh"));
   }
   const head = `<div class="rhead"><span class="rtitle">${bench().name}</span>` +
     `<span class="raxes">${axName(ay, "↑")} × ${axName(ax, "→")}</span>` +
@@ -880,8 +914,17 @@ function renderFrontierReadout(front, ax, ay, isRecord, extra) {
       `<span style="width:8px;height:8px;border-radius:50%;background:${ORG_COLOR[p.org]};flex:none"></span>` +
       `${escHtml(nm)}<span class="fval">${escHtml(fmtAx(ax, p))} · ${escHtml(fmtAx(ay, p))}</span></span>`;
   }).join("");
+  const first = front[0], last = front[front.length - 1];
+  const preview = front.length === 1
+    ? `${displayName(first)} · ${fmtAx(ax, first)} · ${fmtAx(ay, first)}`
+    : `${front.length} models · ${displayName(first)} → ${displayName(last)}`;
   el.innerHTML = head +
-    `<span class="rlist"><span class="rlabel">${isRecord ? historyLabel : "On the frontier"}</span>${chips}</span>`;
+    `<details class="frontier-details"${state.frontierOpen ? " open" : ""}><summary>` +
+    `<span class="rlabel">${isRecord ? historyLabel : "Frontier models"}</span>` +
+    `<span class="rpreview">${escHtml(preview)}</span><span class="rtoggle" aria-hidden="true"></span></summary>` +
+    `<div class="rlist">${chips}</div></details>`;
+  const details = el.querySelector(".frontier-details");
+  details.addEventListener("toggle", () => { state.frontierOpen = details.open; });
   el.querySelectorAll(".fchip").forEach(c => {
     c.addEventListener("mouseenter", () => { state.hover = { type: "name", v: c.dataset.name }; applyFade(); });
     c.addEventListener("mouseleave", () => { state.hover = null; applyFade(); });
@@ -1505,6 +1548,8 @@ function renderEvidence() {
     ["Run evidence", `${b.trace_n || 0} traces · ${b.metrics_n || 0} metered`],
     ["Benchmark version", versions.length ? versions.slice(-2).join(" · ") : "not published"],
   ];
+  const version = versions.length ? ` · ${versions.slice(-1)[0]}` : "";
+  $("#evidence-summary").textContent = `${b.n} runs · ${models} models${version}`;
   $("#evidence").innerHTML = cells.map(([k,v], i) => `<span class="ev"${i === 4 ? ' title="Source-published logs or resource metrics such as tokens, steps, latency, runs, or votes"' : ""}><span class="ek">${escHtml(k)}</span><span class="evv">${escHtml(v)}</span></span>`).join("");
 }
 function syncPresets(allPts) {

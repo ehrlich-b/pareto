@@ -1078,6 +1078,70 @@ func loadAliases(root string) (map[string]string, error) {
 
 const datacurveURL = "https://deepswe.datacurve.ai/artifacts/v1.1/leaderboard-live.json"
 
+type datacurveDeepSWERow struct {
+	Model      string   `json:"model"`
+	Effort     string   `json:"reasoning_effort"`
+	Config     string   `json:"config"`
+	PassAt1    *float64 `json:"pass_at_1"`
+	CIHalf     *float64 `json:"ci_half"`
+	MeanCost   *float64 `json:"mean_cost_usd"`
+	MeanOutTok *float64 `json:"mean_output_tokens"`
+	MeanSteps  *float64 `json:"mean_agent_steps"`
+	NPassed    int      `json:"n_passed"`
+	NAttempted int      `json:"n_attempted"`
+	NRuns      int      `json:"n_runs"`
+}
+
+// Datacurve uses provider aliases rather than immutable checkpoint ids. Pin
+// independently identifiable runs by their published configuration and counts;
+// never let an unrecognized future run fall through to unrelated Epoch metadata.
+//
+// The DeepSeek run below contains 452 trials started on 2026-08-05. DeepSeek's
+// unchanged deepseek-v4-flash API alias had served V4-Flash-0731 since 2026-07-31.
+// Sources:
+//   - https://deepswe.datacurve.ai/artifacts/v1.1/trials.json
+//   - https://api-docs.deepseek.com/updates/
+var datacurvePinnedRevisions = []struct {
+	model, config       string
+	nPassed, nAttempted int
+	nRuns               int
+	slug                string
+}{
+	{
+		model: "deepseek-v4-flash", config: "mini_swe_agent_deepseek_v4_flash_max",
+		nPassed: 241, nAttempted: 452, nRuns: 4, slug: "deepseek-v4-flash-0731",
+	},
+}
+
+const datacurveUnversionedDeepSeekFlash = "deepseek-v4-flash-datacurve-unversioned"
+
+func datacurveModelKey(r datacurveDeepSWERow) string {
+	for _, pin := range datacurvePinnedRevisions {
+		if r.Model == pin.model && r.Config == pin.config && r.NPassed == pin.nPassed &&
+			r.NAttempted == pin.nAttempted && r.NRuns == pin.nRuns {
+			return pin.slug
+		}
+	}
+	if r.Model == "deepseek-v4-flash" {
+		return datacurveUnversionedDeepSeekFlash
+	}
+	return modelKey(r.Model)
+}
+
+func datacurveObservationIdentity(r datacurveDeepSWERow) []string {
+	score, cost := "", ""
+	if r.PassAt1 != nil {
+		score = strconv.FormatFloat(*r.PassAt1, 'g', -1, 64)
+	}
+	if r.MeanCost != nil {
+		cost = strconv.FormatFloat(*r.MeanCost, 'g', -1, 64)
+	}
+	return []string{
+		r.Model, r.Config, r.Effort, score, cost,
+		strconv.Itoa(r.NPassed), strconv.Itoa(r.NAttempted), strconv.Itoa(r.NRuns),
+	}
+}
+
 // Epoch ingests DeepSWE with a lag; Datacurve's live artifact adds new models,
 // fresher runs, and confidence intervals. Org guesses only matter for models
 // Epoch hasn't seen yet.
@@ -1098,16 +1162,8 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 		return scores, 0, err
 	}
 	var doc struct {
-		GeneratedAt string `json:"generated_at"`
-		Rows        []struct {
-			Model      string   `json:"model"`
-			Effort     string   `json:"reasoning_effort"`
-			PassAt1    *float64 `json:"pass_at_1"`
-			CIHalf     *float64 `json:"ci_half"`
-			MeanCost   *float64 `json:"mean_cost_usd"`
-			MeanOutTok *float64 `json:"mean_output_tokens"`
-			MeanSteps  *float64 `json:"mean_agent_steps"`
-		} `json:"rows"`
+		GeneratedAt string                `json:"generated_at"`
+		Rows        []datacurveDeepSWERow `json:"rows"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return scores, 0, err
@@ -1130,9 +1186,9 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 		if r.PassAt1 == nil || r.Model == "" || *r.PassAt1 < 0 || *r.PassAt1 > 1 {
 			continue
 		}
-		slug := modelKey(r.Model)
+		slug := datacurveModelKey(r)
 		uniqueModels[slug] = true
-		identity := []string{r.Model, r.Effort, fmt.Sprint(r.PassAt1), fmt.Sprint(r.MeanCost)}
+		identity := datacurveObservationIdentity(r)
 		rec := map[string]any{
 			"oid": observationID("deepswe-datacurve", identity), "m": slug, "b": "deepswe",
 			"v": roundN(*r.PassAt1, 4), "sm": r.Model, "src": "https://deepswe.datacurve.ai/",
@@ -1140,7 +1196,11 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 		}
 		if e := strings.ToLower(r.Effort); e != "" && e != "unknown" {
 			rec["e"] = e
-			rec["cfg"] = map[string]any{"effort": e}
+			cfg := map[string]any{"effort": e}
+			if r.Config != "" {
+				cfg["source_config"] = r.Config
+			}
+			rec["cfg"] = cfg
 		}
 		if r.CIHalf != nil && *r.CIHalf > 0 {
 			rec["ci"] = roundN(*r.CIHalf, 4)
@@ -1171,7 +1231,11 @@ func fetchDatacurveDeepSWE(scores []map[string]any, benchmarks map[string]any, m
 		}
 		recs = append(recs, rec)
 		if modelMeta[slug] == nil && newMeta[slug] == nil {
-			meta := map[string]any{"display": prettify(slug)}
+			display := prettify(slug)
+			if slug == datacurveUnversionedDeepSeekFlash {
+				display = "DeepSeek V4 Flash (revision unspecified)"
+			}
+			meta := map[string]any{"display": display}
 			for _, p := range dcOrgPrefix {
 				if strings.HasPrefix(slug, p.pre) {
 					meta["org"] = p.org

@@ -44,6 +44,41 @@ func TestModelIdentityPreservesRevisions(t *testing.T) {
 	}
 }
 
+func TestDatacurveDeepSWERevisionPin(t *testing.T) {
+	score, cost := 0.5331858407079646, 0.10023560370265487
+	row := datacurveDeepSWERow{
+		Model: "deepseek-v4-flash", Config: "mini_swe_agent_deepseek_v4_flash_max",
+		Effort: "max", PassAt1: &score, MeanCost: &cost,
+		NPassed: 241, NAttempted: 452, NRuns: 4,
+	}
+	if got := datacurveModelKey(row); got != "deepseek-v4-flash-0731" {
+		t.Fatalf("known Datacurve run mapped to %q", got)
+	}
+
+	// A future rerun behind the same moving provider alias must not inherit the
+	// April checkpoint's metadata or remain incorrectly pinned to 0731.
+	row.NPassed++
+	if got := datacurveModelKey(row); got != datacurveUnversionedDeepSeekFlash {
+		t.Fatalf("unknown Datacurve run mapped to %q", got)
+	}
+
+	other := datacurveDeepSWERow{Model: "gpt-5-6-sol"}
+	if got := datacurveModelKey(other); got != "gpt-5-6-sol" {
+		t.Fatalf("unrelated model mapped to %q", got)
+	}
+
+	// Pointer addresses differ across decodes, but published observation ids must
+	// remain stable as long as the source values do.
+	score2, cost2 := score, cost
+	row2 := row
+	row2.PassAt1, row2.MeanCost = &score2, &cost2
+	got1 := observationID("deepswe-datacurve", datacurveObservationIdentity(row))
+	got2 := observationID("deepswe-datacurve", datacurveObservationIdentity(row2))
+	if got1 != got2 {
+		t.Fatalf("Datacurve observation id is unstable: %q != %q", got1, got2)
+	}
+}
+
 func TestBenchmarkParserKeepsConfigurationsAndSemantics(t *testing.T) {
 	data := zipFixture(t, map[string]string{
 		"arc_agi_external.csv": "Model version,Score,Name,Cost per task,Release date,Organization,Source link,id\n" +
